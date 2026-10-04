@@ -1,0 +1,27 @@
+{
+    "name": "business-mvc-php",
+    "version": "1.0.0",
+    "description": "",
+    "homepage": "https://github.com/vinojcardoza/business-mvc-php#readme",
+    "bugs": {
+        "url": "https://github.com/vinojcardoza/business-mvc-php/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinojcardoza/business-mvc-php.git"
+    },
+    "license": "ISC",
+    "author": "",
+    "type": "commonjs",
+    "main": "index.js",
+    "directories": {
+        "test": "tests"
+    },
+    "scripts": {
+        "watch": "gulp watch"
+    },
+    "devDependencies": {
+        "gulp": "^5.0.1",
+        "gulp-shell": "^0.8.0"
+    }
+}
