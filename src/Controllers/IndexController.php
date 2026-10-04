@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use GuzzleHttp\Psr7\Utils;
-use GuzzleHttp\Psr7\Response;
+use Psr\Http\Message\ResponseInterface;
+use Nyholm\Psr7\Factory\Psr17Factory;
 
 /**
  * Class IndexController
@@ -15,13 +15,14 @@ use GuzzleHttp\Psr7\Response;
 class IndexController
 {
     /**
-     * @return Response
+     * @return ResponseInterface
      */
-    public function index(): Response
+    public function index(): ResponseInterface
     {
-        $stream = Utils::streamFor('Home page');
+        $factory = new Psr17Factory();
+        $stream = $factory->createStream('Home page');
 
-        $response = new Response();
+        $response = $factory->createResponse();
 
         $response = $response->withBody($stream);
 

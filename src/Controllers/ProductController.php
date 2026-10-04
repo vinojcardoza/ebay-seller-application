@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use GuzzleHttp\Psr7\ServerRequest;
-use GuzzleHttp\Psr7\Response;
-use GuzzleHttp\Psr7\Utils;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * Class ProductController
@@ -16,26 +16,36 @@ use GuzzleHttp\Psr7\Utils;
 class ProductController
 {
     /**
-     * @return Response
+     * @return ResponseInterface
      */
-    public function index(): Response
+    public function index(): ResponseInterface
     {
-        $stream = Utils::streamFor('Products Index');
+        $factory = new Psr17Factory();
 
-        $response = new Response();
+        $stream = $factory->createStream('Products Index');
+
+        $response = $factory->createResponse();
 
         $response = $response->withBody($stream);
 
         return $response;
     }
 
-    public function show(ServerRequest $request, array $args = []): Response
+    /**
+     * @param ServerRequestInterface $request
+     * @param array $args
+     *
+     * @return ResponseInterface
+     */
+    public function show(ServerRequestInterface $request, array $args = []): ResponseInterface
     {
         $id = $args['id'];
 
-        $stream = Utils::streamFor('Products Show ' . $id);
+        $factory = new Psr17Factory();
 
-        $response = new Response();
+        $stream = $factory->createStream('Products Show ' . $id);
+
+        $response = $factory->createResponse();
 
         $response = $response->withBody($stream);
 

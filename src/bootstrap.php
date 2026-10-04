@@ -19,7 +19,7 @@ $request = ServerRequest::fromGlobals();
 $router = new Router();
 
 $router->get('/', [IndexController::class, 'index']);
-$router->get('/product', [ProductController::class, 'index']);
+$router->get('/products', [ProductController::class, 'index']);
 $router->get('/product/{id:number}', [ProductController::class, 'show']);
 
 $response = $router->dispatch($request);

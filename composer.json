@@ -23,7 +23,9 @@
         "doctrine/orm": "^3.7",
         "symfony/cache": "^8.1",
         "httpsoft/http-emitter": "^1.1",
-        "league/route": "^7.0"
+        "league/route": "^7.0",
+        "psr/http-message": "^2.0",
+        "nyholm/psr7": "^1.8"
     },
     "scripts": {
         "phpcs": "vendor/bin/phpcs src config tests",
