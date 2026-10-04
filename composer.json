@@ -18,15 +18,21 @@
     },
     "require": {
         "vlucas/phpdotenv": "^5.7",
-        "guzzlehttp/psr7": "^3.1"
+        "guzzlehttp/psr7": "^3.1",
+        "php-di/php-di": "^7.1",
+        "doctrine/orm": "^3.7",
+        "symfony/cache": "^8.1",
+        "httpsoft/http-emitter": "^1.1"
     },
     "scripts": {
         "phpcs": "phpcs --standard=PSR12 src config tests",
         "phpcbf": "phpcbf --standard=PSR12 src config tests",
         "phpstan": "phpstan analyse src config tests",
+        "phpunit": "phpunit tests",
         "lint": [
             "@phpcs",
-            "@phpstan"
+            "@phpstan",
+            "@phpunit"
         ]
     }
 }

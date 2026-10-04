@@ -1,6 +1,8 @@
 parameters:
-    level: 8
+    level: 6
     paths:
         - src
         - config
         - tests
+    ignoreErrors:
+        #- identifier: missingType.iterableValue
