@@ -13,7 +13,8 @@
     ],
     "require-dev": {
         "phpunit/phpunit": "^13.4",
-        "squizlabs/php_codesniffer": "^4.0"
+        "squizlabs/php_codesniffer": "^4.0",
+        "phpstan/phpstan": "^2.2"
     },
     "require": {
         "vlucas/phpdotenv": "^5.7",
@@ -21,6 +22,11 @@
     },
     "scripts": {
         "phpcs": "phpcs --standard=PSR12 src config tests",
-        "phpcbf": "phpcbf --standard=PSR12 src config tests"
+        "phpcbf": "phpcbf --standard=PSR12 src config tests",
+        "phpstan": "phpstan analyse src config tests",
+        "lint": [
+            "@phpcs",
+            "@phpstan"
+        ]
     }
 }
