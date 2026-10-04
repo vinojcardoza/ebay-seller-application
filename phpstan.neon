@@ -5,4 +5,4 @@ parameters:
         - config
         - tests
     ignoreErrors:
-        #- identifier: missingType.iterableValue
+        - identifier: missingType.iterableValue

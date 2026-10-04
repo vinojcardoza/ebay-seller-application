@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use GuzzleHttp\Psr7\Utils;
+use GuzzleHttp\Psr7\Response;
+
 /**
  * Class IndexController
  *
@@ -12,10 +15,16 @@ namespace App\Controllers;
 class IndexController
 {
     /**
-     * @return string
+     * @return Response
      */
-    public function index(): string
+    public function index(): Response
     {
-        return 'Home page';
+        $stream = Utils::streamFor('Home page');
+
+        $response = new Response();
+
+        $response = $response->withBody($stream);
+
+        return $response;
     }
 }

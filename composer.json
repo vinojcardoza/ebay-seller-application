@@ -22,14 +22,16 @@
         "php-di/php-di": "^7.1",
         "doctrine/orm": "^3.7",
         "symfony/cache": "^8.1",
-        "httpsoft/http-emitter": "^1.1"
+        "httpsoft/http-emitter": "^1.1",
+        "league/route": "^7.0"
     },
     "scripts": {
-        "phpcs": "phpcs --standard=PSR12 src config tests",
-        "phpcbf": "phpcbf --standard=PSR12 src config tests",
-        "phpstan": "phpstan analyse src config tests",
-        "phpunit": "phpunit tests",
+        "phpcs": "vendor/bin/phpcs src config tests",
+        "phpcbf": "vendor/bin/phpcbf src config tests",
+        "phpstan": "vendor/bin/phpstan analyse src config tests",
+        "phpunit": "vendor/bin/phpunit tests",
         "lint": [
+            "@phpcbf",
             "@phpcs",
             "@phpstan",
             "@phpunit"
