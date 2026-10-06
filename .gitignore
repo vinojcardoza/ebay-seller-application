@@ -1,8 +1,7 @@
 /vendor
 /node_modules
 
+.env
 .DS_Store
 composer.lock
 package-lock.json
-
-

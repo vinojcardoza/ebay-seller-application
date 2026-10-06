@@ -1,0 +1,49 @@
+services:
+    php:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: business_app_php
+        volumes:
+            - .:/var/www/html
+        environment:
+            MARIADB_DATABASE: ${MARIADB_DATABASE}
+            MARIADB_USER: ${MARIADB_USER}
+            MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+            MARIADB_HOST: mariadb
+        depends_on:
+            - mariadb
+    nginx:
+        image: nginx:alpine
+        container_name: business_app_nginx
+        ports:
+            - '8181:80'
+        volumes:
+            - .:/var/www/html
+            - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+        depends_on:
+            - php
+    mariadb:
+        image: mariadb:11
+        container_name: business_app_mariadb
+        restart: unless-stopped
+        environment:
+            MARIADB_DATABASE: ${MARIADB_DATABASE}
+            MARIADB_USER: ${MARIADB_USER}
+            MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+            MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+        volumes:
+            - mariadb_data:/var/lib/mysql
+    phpmyadmin:
+        image: phpmyadmin:latest
+        container_name: business_app_phpmyadmin
+        restart: unless-stopped
+        ports:
+            - '8182:80'
+        environment:
+            PMA_HOST: mariadb
+            PMA_PORT: 3306
+        depends_on:
+            - mariadb
+volumes:
+    mariadb_data:
