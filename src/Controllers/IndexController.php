@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use Psr\Http\Message\ResponseInterface;
-use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Message\ResponseFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 /**
  * Class IndexController
@@ -15,14 +16,22 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 class IndexController
 {
     /**
+     * MARK: Constructor
+     */
+    public function __construct(
+        private ResponseFactoryInterface $factory,
+        private StreamFactoryInterface $stream
+    ) {
+    }
+
+    /**
      * @return ResponseInterface
      */
     public function index(): ResponseInterface
     {
-        $factory = new Psr17Factory();
-        $stream = $factory->createStream('Home page');
+        $stream = $this->stream->createStream('Home page');
 
-        $response = $factory->createResponse();
+        $response = $this->factory->createResponse();
 
         $response = $response->withBody($stream);
 

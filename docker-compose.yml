@@ -33,7 +33,7 @@ services:
             MARIADB_PASSWORD: ${MARIADB_PASSWORD}
             MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
         volumes:
-            - mariadb_data:/var/lib/mysql
+            - business_app_mariadb_data:/var/lib/mysql
     phpmyadmin:
         image: phpmyadmin:latest
         container_name: business_app_phpmyadmin
@@ -46,4 +46,4 @@ services:
         depends_on:
             - mariadb
 volumes:
-    mariadb_data:
+    business_app_mariadb_data:

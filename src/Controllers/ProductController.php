@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 /**
  * Class ProductController
@@ -15,16 +17,19 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 class ProductController
 {
+    public function __construct(
+        private StreamFactoryInterface $stream,
+        private ResponseFactoryInterface $factory
+    ) {
+    }
     /**
      * @return ResponseInterface
      */
     public function index(): ResponseInterface
     {
-        $factory = new Psr17Factory();
+        $stream = $this->stream->createStream('Products Index');
 
-        $stream = $factory->createStream('Products Index');
-
-        $response = $factory->createResponse();
+        $response = $this->factory->createResponse();
 
         $response = $response->withBody($stream);
 
@@ -41,11 +46,9 @@ class ProductController
     {
         $id = $args['id'];
 
-        $factory = new Psr17Factory();
+        $stream = $this->stream->createStream('Products Show ' . $id);
 
-        $stream = $factory->createStream('Products Show ' . $id);
-
-        $response = $factory->createResponse();
+        $response = $this->factory->createResponse();
 
         $response = $response->withBody($stream);
 
