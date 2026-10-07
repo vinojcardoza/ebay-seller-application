@@ -6,101 +6,86 @@ const { error } = require('console');
 let running = false;
 
 function runCommand(command, args, done) {
-  execFile(command, args, (error, stdout, stderr) => {
-    if (stdout) {
-      process.stdout.write(stdout);
-    }
+    execFile(command, args, (error, stdout, stderr) => {
+        if (stdout) {
+            process.stdout.write(stdout);
+        }
 
-    if (stderr) {
-      process.stderr.write(stderr);
-    }
+        if (stderr) {
+            process.stderr.write(stderr);
+        }
 
-    done(error || undefined);
-  });
+        done(error || undefined);
+    });
 }
 
 function phpcbf(file, done) {
-  const relativePath = path.relative(process.cwd(), file);
+    const relativePath = path.relative(process.cwd(), file);
 
-  runCommand('./vendor/bin/phpcbf', [relativePath], done);
+    runCommand('./vendor/bin/phpcbf', [relativePath], done);
 }
 
 function phpcs(file, done) {
-  const relativePath = path.relative(process.cwd(), file);
+    const relativePath = path.relative(process.cwd(), file);
 
-  runCommand('./vendor/bin/phpcs', [relativePath], done);
+    runCommand('./vendor/bin/phpcs', [relativePath], done);
 }
 
 function phpstan(file, done) {
-  const relativePath = path.relative(process.cwd(), file);
+    const relativePath = path.relative(process.cwd(), file);
 
-  runCommand('./vendor/bin/phpstan', ['analyse', relativePath], done);
+    runCommand('./vendor/bin/phpstan', ['analyse', relativePath], done);
 }
 
 function checkPhp(file) {
-  if (running) {
-    return;
-  }
-
-  running = true;
-
-  phpcbf(file, (error) => {
-    if (error) {
-      running = false;
-      return;
+    if (running) {
+        return;
     }
 
-    phpcs(file, (error) => {
-      if (error) {
-        running = false;
-        return;
-      }
+    running = true;
 
-      phpstan(file, (error) => {
-        running = false;
-      });
-    });
-  });
-}
+    phpcbf(file, (error) => {
+        if (error) {
+            running = false;
+            return;
+        }
 
-function prettier(file, done) {
-    const relativePath = path.relative(process.cwd(), file);
+        phpcs(file, (error) => {
+            if (error) {
+                running = false;
+                return;
+            }
 
-    runCommand(
-        './node_modules/.bin/prettier',
-        [
-            '--write',
-            '--plugin=@prettier/plugin-php',
-            '--parser=php',
-            relativePath,
-        ],
-        done,
-    );
-}
+            console.log('PHPCS completed successfully!');
 
-
-function watch() {
-    gulp
-        .watch(['src/**/*.php', 'config/**/*.php', 'tests/**/*.php'], {
-            ignoreInitial: true,
-        })
-        .on('change', (file) => {
-            checkPhp(file);
-        });
-    
-    gulp
-        .watch(['views/**/*.php'], {
-            ignoreInitial: true,
-        })
-        .on('change', (file) => {
-            phpcbf(file, function (error) {
+            phpstan(file, (error) => {
                 if (error) {
                     return;
                 }
+                console.log('PHPStan completed successfully!');
+
+                running = false;
             });
         });
+    });
+}
 
-    
+function watch() {
+    gulp.watch(['src/**/*.php', 'config/**/*.php', 'tests/**/*.php'], {
+        ignoreInitial: true,
+    }).on('change', (file) => {
+        checkPhp(file);
+    });
+
+    gulp.watch(['views/**/*.php'], {
+        ignoreInitial: true,
+    }).on('change', (file) => {
+        phpcbf(file, function (error) {
+            if (error) {
+                return;
+            }
+        });
+    });
 }
 
 exports.phpcbf = phpcbf;

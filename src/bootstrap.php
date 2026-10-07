@@ -23,11 +23,17 @@ require_once APP_ROOT . '/vendor/autoload.php';
 
 $request = ServerRequest::fromGlobals();
 
-$container = new DI\Container([
+$builder = new DI\ContainerBuilder();
+
+$builder->addDefinitions([
     StreamFactoryInterface::class => DI\create(Psr17Factory::class),
     ResponseFactoryInterface::class => DI\create(Psr17Factory::class),
     RendererInterface::class => DI\create(PlatesRender::class)
 ]);
+
+$builder->useAttributes(true);
+
+$container = $builder->build();
 
 $router = new Router();
 

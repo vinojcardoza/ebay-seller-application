@@ -8,18 +8,21 @@ use App\Framework\Template\RendererInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use DI\Attribute\Inject;
 
 /**
  * Abstract Class ControllerAbstract
  */
 abstract class ControllerAbstract
 {
-    public function __construct(
-        private RendererInterface $renderer,
-        private StreamFactoryInterface $stream,
-        private ResponseFactoryInterface $factory
-    ) {
-    }
+    #[Inject]
+    private readonly RendererInterface $renderer;
+
+    #[Inject]
+    private readonly StreamFactoryInterface $stream;
+
+    #[Inject]
+    private readonly ResponseFactoryInterface $factory;
 
     protected function render(string $template, array $args = []): ResponseInterface
     {
