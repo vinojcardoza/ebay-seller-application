@@ -34,7 +34,7 @@ function phpcs(file, done) {
 function phpstan(file, done) {
     const relativePath = path.relative(process.cwd(), file);
 
-    runCommand('./vendor/bin/phpstan', ['analyse', relativePath], done);
+    runCommand('./vendor/bin/phpstan', ['analyse'], done);
 }
 
 function checkPhp(file) {
