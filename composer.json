@@ -25,7 +25,8 @@
         "httpsoft/http-emitter": "^1.1",
         "league/route": "^7.0",
         "psr/http-message": "^2.0",
-        "nyholm/psr7": "^1.8"
+        "nyholm/psr7": "^1.8",
+        "league/plates": "^3.6"
     },
     "scripts": {
         "phpcs": "vendor/bin/phpcs src config tests",

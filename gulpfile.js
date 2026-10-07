@@ -5,68 +5,70 @@ const path = require('path');
 let running = false;
 
 function runCommand(command, args, done) {
-    execFile(command, args, (error, stdout, stderr) => {
-        if (stdout) {
-            process.stdout.write(stdout);
-        }
+  execFile(command, args, (error, stdout, stderr) => {
+    if (stdout) {
+      process.stdout.write(stdout);
+    }
 
-        if (stderr) {
-            process.stderr.write(stderr);
-        }
+    if (stderr) {
+      process.stderr.write(stderr);
+    }
 
-        done(error || undefined);
-    });
+    done(error || undefined);
+  });
 }
 
 function phpcbf(file, done) {
-    const relativePath = path.relative(process.cwd(), file);
+  const relativePath = path.relative(process.cwd(), file);
 
-    runCommand('./vendor/bin/phpcbf', [relativePath], done);
+  runCommand('./vendor/bin/phpcbf', [relativePath], done);
 }
 
 function phpcs(file, done) {
-    const relativePath = path.relative(process.cwd(), file);
+  const relativePath = path.relative(process.cwd(), file);
 
-    runCommand('./vendor/bin/phpcs', [relativePath], done);
+  runCommand('./vendor/bin/phpcs', [relativePath], done);
 }
 
 function phpstan(file, done) {
-    const relativePath = path.relative(process.cwd(), file);
+  const relativePath = path.relative(process.cwd(), file);
 
-    runCommand('./vendor/bin/phpstan', ['analyse', relativePath], done);
+  runCommand('./vendor/bin/phpstan', ['analyse', relativePath], done);
 }
 
 function checkPhp(file) {
-    if (running) {
-        return;
+  if (running) {
+    return;
+  }
+
+  running = true;
+
+  phpcbf(file, (error) => {
+    if (error) {
+      running = false;
+      return;
     }
 
-    running = true;
+    phpcs(file, (error) => {
+      if (error) {
+        running = false;
+        return;
+      }
 
-    phpcbf(file, (error) => {
-        if (error) {
-            running = false;
-            return;
-        }
-
-        phpcs(file, (error) => {
-            if (error) {
-                running = false;
-                return;
-            }
-
-            phpstan(file, (error) => {
-                running = false;
-            });
-        });
+      phpstan(file, (error) => {
+        running = false;
+      });
     });
+  });
 }
 
 function watch() {
-    gulp.watch(['src/**/*.php', 'config/**/*.php', 'tests/**/*.php'], {
-        ignoreInitial: true,
-    }).on('change', (file) => {
-        checkPhp(file);
+  gulp
+    .watch(['src/**/*.php', 'config/**/*.php', 'tests/**/*.php'], {
+      ignoreInitial: true,
+    })
+    .on('change', (file) => {
+      checkPhp(file);
     });
 }
 

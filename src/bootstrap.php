@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use App\Controllers\IndexController;
 use App\Controllers\ProductController;
+use App\Framework\Template\PlatesRender;
+use App\Framework\Template\RendererInterface;
 use GuzzleHttp\Psr7\ServerRequest;
 use HttpSoft\Emitter\SapiEmitter;
-use Psr\Http\Message\ResponseFactoryInterface;
-use Nyholm\Psr7\Factory\Psr17Factory;
 use League\Route\Router;
 use League\Route\Strategy\ApplicationStrategy;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 
 define("APP_ROOT", dirname(__DIR__));
@@ -22,7 +24,8 @@ $request = ServerRequest::fromGlobals();
 
 $container = new DI\Container([
     StreamFactoryInterface::class => DI\create(Psr17Factory::class),
-    ResponseFactoryInterface::class => DI\create(Psr17Factory::class)
+    ResponseFactoryInterface::class => DI\create(Psr17Factory::class),
+    RendererInterface::class => DI\create(PlatesRender::class)
 ]);
 $controller = $container->get(IndexController::class);
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Framework\Template\RendererInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
@@ -20,7 +21,8 @@ class IndexController
      */
     public function __construct(
         private ResponseFactoryInterface $factory,
-        private StreamFactoryInterface $stream
+        private StreamFactoryInterface $stream,
+        private RendererInterface $renderer
     ) {
     }
 
@@ -29,7 +31,11 @@ class IndexController
      */
     public function index(): ResponseInterface
     {
-        $stream = $this->stream->createStream('Home page');
+        $content = $this->renderer->render('index/index', [
+            'name' => 'Vinoj Cardoza'
+            ]);
+
+        $stream = $this->stream->createStream($content);
 
         $response = $this->factory->createResponse();
 
