@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Controllers\IndexController;
 use App\Controllers\ProductController;
+use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\PlatesRender;
 use App\Framework\Template\RendererInterface;
 use GuzzleHttp\Psr7\ServerRequest;
@@ -27,7 +28,6 @@ $container = new DI\Container([
     ResponseFactoryInterface::class => DI\create(Psr17Factory::class),
     RendererInterface::class => DI\create(PlatesRender::class)
 ]);
-$controller = $container->get(IndexController::class);
 
 $router = new Router();
 

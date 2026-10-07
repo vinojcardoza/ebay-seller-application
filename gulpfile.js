@@ -1,6 +1,7 @@
 const gulp = require('gulp');
 const { execFile } = require('child_process');
 const path = require('path');
+const { error } = require('console');
 
 let running = false;
 
@@ -62,14 +63,44 @@ function checkPhp(file) {
   });
 }
 
+function prettier(file, done) {
+    const relativePath = path.relative(process.cwd(), file);
+
+    runCommand(
+        './node_modules/.bin/prettier',
+        [
+            '--write',
+            '--plugin=@prettier/plugin-php',
+            '--parser=php',
+            relativePath,
+        ],
+        done,
+    );
+}
+
+
 function watch() {
-  gulp
-    .watch(['src/**/*.php', 'config/**/*.php', 'tests/**/*.php'], {
-      ignoreInitial: true,
-    })
-    .on('change', (file) => {
-      checkPhp(file);
-    });
+    gulp
+        .watch(['src/**/*.php', 'config/**/*.php', 'tests/**/*.php'], {
+            ignoreInitial: true,
+        })
+        .on('change', (file) => {
+            checkPhp(file);
+        });
+    
+    gulp
+        .watch(['views/**/*.php'], {
+            ignoreInitial: true,
+        })
+        .on('change', (file) => {
+            phpcbf(file, function (error) {
+                if (error) {
+                    return;
+                }
+            });
+        });
+
+    
 }
 
 exports.phpcbf = phpcbf;

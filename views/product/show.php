@@ -1,2 +1,2 @@
-<?php $this->layout('layout');?>
+<?php $this->layout('layout', ['title' => 'Product Name']);?>
 Product show <?php echo $id;?>

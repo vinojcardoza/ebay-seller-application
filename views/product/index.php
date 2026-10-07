@@ -1,4 +1,10 @@
 <?php
 
-$this->layout('layout', ['title' => 'Products']); ?>
-<h1>products indexssdsd</h1>
+/**
+ * View: Products List
+ */
+
+$this->layout('layout', ['title' => 'Products']);
+
+?>
+<h1>Products List</h1>
