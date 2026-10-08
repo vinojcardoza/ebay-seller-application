@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Framework\Controller;
 
 use App\Framework\Template\RendererInterface;
+use Doctrine\ORM\EntityManagerInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
@@ -17,7 +18,8 @@ abstract class ControllerAbstract
     public function __construct(
         private RendererInterface $renderer,
         private StreamFactoryInterface $stream,
-        private ResponseFactoryInterface $factory
+        private ResponseFactoryInterface $factory,
+        protected EntityManagerInterface $em
     ) {
     }
 

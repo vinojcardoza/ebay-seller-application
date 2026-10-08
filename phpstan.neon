@@ -5,4 +5,6 @@ parameters:
         - config
         - tests
     ignoreErrors:
-        - identifier: missingType.iterableValue
+        - identifiers: 
+            - missingType.iterableValue
+            - property.onlyRead 

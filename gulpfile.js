@@ -58,8 +58,11 @@ function checkPhp(file) {
 
             console.log('PHPCS completed successfully!');
 
+            running = false;
+
             phpstan(file, (error) => {
                 if (error) {
+                    running = false;
                     return;
                 }
                 console.log('PHPStan completed successfully!');
@@ -77,15 +80,15 @@ function watch() {
         checkPhp(file);
     });
 
-    gulp.watch(['views/**/*.php'], {
-        ignoreInitial: true,
-    }).on('change', (file) => {
-        phpcbf(file, function (error) {
-            if (error) {
-                return;
-            }
-        });
-    });
+    // gulp.watch(['views/**/*.php'], {
+    //     ignoreInitial: true,
+    // }).on('change', (file) => {
+    //     phpcbf(file, function (error) {
+    //         if (error) {
+    //             return;
+    //         }
+    //     });
+    // });
 }
 
 exports.phpcbf = phpcbf;

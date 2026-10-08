@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\RendererInterface;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -24,7 +25,13 @@ class ProductController extends ControllerAbstract
      */
     public function index(): ResponseInterface
     {
-        return $this->render('/product/index');
+        $repository = $this->em->getRepository(Product::class);
+
+        $products = $repository->findAll();
+
+        return $this->render('/product/index', [
+            'products' => $products
+        ]);
     }
 
     /**
