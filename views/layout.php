@@ -2,10 +2,7 @@
 <html>
     <head>
         <title><?php echo $this->e($title ?? 'Business App');?></title>
-        <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.classless.min.css"
-    >
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.classless.min.css"/>
     </head>
     <body>
         <header>
