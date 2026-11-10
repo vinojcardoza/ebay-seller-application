@@ -18,6 +18,7 @@ $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PA
 
 $navItems = [
     ['label' => 'Dashboard', 'url' => '/', 'icon' => 'ti-layout-dashboard'],
+    ['label' => 'Orders', 'url' => '/orders', 'icon' => 'ti-shopping-cart'],
     ['label' => 'Products', 'url' => '/products', 'icon' => 'ti-package', 'match' => '/product'],
     ['label' => 'Categories', 'url' => '/categories', 'icon' => 'ti-category'],
     ['label' => 'Custom SKUs', 'url' => '/custom-skus', 'icon' => 'ti-packages'],

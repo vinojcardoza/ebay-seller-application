@@ -5,6 +5,7 @@ use App\Controllers\CustomSkusController;
 use App\Controllers\EbayController;
 use App\Controllers\FeedbackController;
 use App\Controllers\IndexController;
+use App\Controllers\OrdersController;
 use App\Controllers\ProductController;
 use App\Controllers\PurchasesController;
 use League\Route\Router;
@@ -39,6 +40,18 @@ return function (Router $router) {
         '/custom-skus/{id:number}/products/{lineId:number}/delete',
         [CustomSkusController::class, 'removeLine']
     );
+
+    $router->get('/orders', [OrdersController::class, 'index']);
+    $router->get('/orders/create', [OrdersController::class, 'create']);
+    $router->post('/orders', [OrdersController::class, 'store']);
+    $router->get('/orders/{id:number}', [OrdersController::class, 'show']);
+    $router->get('/orders/{id:number}/edit', [OrdersController::class, 'edit']);
+    $router->post('/orders/{id:number}', [OrdersController::class, 'update']);
+    $router->post('/orders/{id:number}/delete', [OrdersController::class, 'delete']);
+    $router->post('/orders/{id:number}/items', [OrdersController::class, 'addItem']);
+    $router->get('/orders/{id:number}/items/{itemId:number}/edit', [OrdersController::class, 'editItem']);
+    $router->post('/orders/{id:number}/items/{itemId:number}', [OrdersController::class, 'updateItem']);
+    $router->post('/orders/{id:number}/items/{itemId:number}/delete', [OrdersController::class, 'removeItem']);
 
     $router->get('/purchases', [PurchasesController::class, 'index']);
     $router->get('/purchases/create', [PurchasesController::class, 'create']);
