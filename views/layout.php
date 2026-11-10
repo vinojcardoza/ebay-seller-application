@@ -20,6 +20,7 @@ $navItems = [
     ['label' => 'Dashboard', 'url' => '/', 'icon' => 'ti-layout-dashboard'],
     ['label' => 'Products', 'url' => '/products', 'icon' => 'ti-package', 'match' => '/product'],
     ['label' => 'Categories', 'url' => '/categories', 'icon' => 'ti-category'],
+    ['label' => 'Feedback', 'url' => '/feedbacks', 'icon' => 'ti-message-star'],
     ['label' => 'eBay', 'url' => '/ebay', 'icon' => 'ti-shopping-bag'],
 ];
 
@@ -37,7 +38,7 @@ $isActive = static function (array $item) use ($path): bool {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= $this->e($title) ?> · Business App</title>
+    <title><?php echo $this->e($title); ?> · Business App</title>
     <script>
         // Apply the saved theme before first paint to avoid a light flash in dark mode.
         try {
@@ -66,10 +67,10 @@ $isActive = static function (array $item) use ($path): bool {
             <?php foreach ($navItems as $item) : ?>
                 <?php $active = $isActive($item); ?>
                 <li>
-                    <a class="app-nav-link<?= $active ? ' active' : '' ?>" href="<?= $item['url'] ?>"
-                        <?= $active ? 'aria-current="page"' : '' ?>>
-                        <i class="ti <?= $item['icon'] ?>" aria-hidden="true"></i>
-                        <span><?= $this->e($item['label']) ?></span>
+                    <a class="app-nav-link<?php echo $active ? ' active' : ''; ?>" href="<?php echo $item['url']; ?>"
+                        <?php echo $active ? 'aria-current="page"' : ''; ?>>
+                        <i class="ti <?php echo $item['icon']; ?>" aria-hidden="true"></i>
+                        <span><?php echo $this->e($item['label']); ?></span>
                     </a>
                 </li>
             <?php endforeach; ?>
@@ -105,25 +106,25 @@ $isActive = static function (array $item) use ($path): bool {
                                 <li class="breadcrumb-item"><a href="/">Home</a></li>
                                 <?php foreach ($breadcrumbs as $label => $url) : ?>
                                     <?php if ($url === null) : ?>
-                                        <li class="breadcrumb-item active" aria-current="page"><?= $this->e($label) ?></li>
+                                        <li class="breadcrumb-item active" aria-current="page"><?php echo $this->e($label); ?></li>
                                     <?php else : ?>
-                                        <li class="breadcrumb-item"><a href="<?= $this->e($url) ?>"><?= $this->e($label) ?></a></li>
+                                        <li class="breadcrumb-item"><a href="<?php echo $this->e($url); ?>"><?php echo $this->e($label); ?></a></li>
                                     <?php endif; ?>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </ol>
                     </nav>
-                    <h1><?= $this->e($title) ?></h1>
+                    <h1><?php echo $this->e($title); ?></h1>
                 </div>
                 <?php if ($this->section('actions')) : ?>
-                    <div class="d-flex flex-wrap gap-2"><?= $this->section('actions') ?></div>
+                    <div class="d-flex flex-wrap gap-2"><?php echo $this->section('actions'); ?></div>
                 <?php endif; ?>
             </div>
 
-            <?= $this->section('content') ?>
+            <?php echo $this->section('content'); ?>
         </main>
 
-        <footer class="app-footer">&copy; <?= date('Y') ?> Business App</footer>
+        <footer class="app-footer">&copy; <?php echo date('Y'); ?> Business App</footer>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

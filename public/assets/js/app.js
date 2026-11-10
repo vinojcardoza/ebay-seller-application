@@ -47,6 +47,57 @@
         button.setAttribute('title', 'Switch to ' + next + ' mode');
     }
 
+    /**
+     * Shared tooltip for chart marks with data-tip-value / data-tip-label,
+     * shown on hover and keyboard focus. Text is set with textContent only.
+     */
+    function initChartTooltips() {
+        var marks = document.querySelectorAll('[data-tip-value]');
+        if (marks.length === 0) {
+            return;
+        }
+
+        var tip = document.createElement('div');
+        var value = document.createElement('strong');
+        var label = document.createElement('span');
+        tip.className = 'chart-tooltip';
+        tip.setAttribute('role', 'presentation');
+        tip.hidden = true;
+        tip.appendChild(value);
+        tip.appendChild(label);
+        document.body.appendChild(tip);
+
+        function show(mark) {
+            value.textContent = mark.getAttribute('data-tip-value');
+            label.textContent = mark.getAttribute('data-tip-label');
+            tip.hidden = false;
+
+            var box = mark.getBoundingClientRect();
+            var left = box.left + box.width / 2 - tip.offsetWidth / 2;
+            var maxLeft = document.documentElement.clientWidth - tip.offsetWidth - 8;
+            tip.style.left = Math.max(8, Math.min(left, maxLeft)) + 'px';
+            tip.style.top = Math.max(8, box.top - tip.offsetHeight - 8) + 'px';
+        }
+
+        function hide() {
+            tip.hidden = true;
+        }
+
+        marks.forEach(function (mark) {
+            mark.addEventListener('pointerenter', function () { show(mark); });
+            mark.addEventListener('pointerleave', hide);
+            mark.addEventListener('focus', function () { show(mark); });
+            mark.addEventListener('blur', hide);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                hide();
+            }
+        });
+        window.addEventListener('scroll', hide, { passive: true });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         applyTheme(root.getAttribute('data-bs-theme') || 'light');
 
@@ -72,6 +123,8 @@
                 document.body.classList.remove('sidebar-open');
             }
         });
+
+        initChartTooltips();
 
         document.querySelectorAll('form[data-confirm]').forEach(function (form) {
             form.addEventListener('submit', function (event) {

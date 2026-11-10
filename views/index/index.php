@@ -36,10 +36,10 @@ $typeTint = static fn (string $type): string => match ($type) {
         <div class="col-sm-6 col-xl-3">
             <div class="card kpi-card">
                 <div class="card-body">
-                    <span class="kpi-icon tint-<?= $kpi['tint'] ?>"><i class="ti <?= $kpi['icon'] ?>" aria-hidden="true"></i></span>
+                    <span class="kpi-icon tint-<?php echo $kpi['tint']; ?>"><i class="ti <?php echo $kpi['icon']; ?>" aria-hidden="true"></i></span>
                     <div>
-                        <p class="kpi-value"><?= $this->e($kpi['value']) ?></p>
-                        <p class="kpi-label"><?= $this->e($kpi['label']) ?></p>
+                        <p class="kpi-value"><?php echo $this->e($kpi['value']); ?></p>
+                        <p class="kpi-label"><?php echo $this->e($kpi['label']); ?></p>
                     </div>
                 </div>
             </div>
@@ -68,16 +68,16 @@ $typeTint = static fn (string $type): string => match ($type) {
                     <tbody>
                         <?php foreach ($recentOrders as $order) : ?>
                             <tr>
-                                <td class="text-nowrap"><?= $this->e($order['order_reference']) ?></td>
-                                <td class="text-nowrap"><?= $this->e($order['full_name'] ?? '—') ?></td>
-                                <td><?= $this->e($order['platform']) ?></td>
+                                <td class="text-nowrap"><?php echo $this->e($order['order_reference']); ?></td>
+                                <td class="text-nowrap"><?php echo $this->e($order['full_name'] ?? '—'); ?></td>
+                                <td><?php echo $this->e($order['platform']); ?></td>
                                 <td>
-                                    <span class="badge tint-<?= $typeTint($order['order_type']) ?>">
-                                        <?= $this->e($order['order_type']) ?>
+                                    <span class="badge tint-<?php echo $typeTint($order['order_type']); ?>">
+                                        <?php echo $this->e($order['order_type']); ?>
                                     </span>
                                 </td>
-                                <td class="text-nowrap"><?= $this->e(date('d M Y', (int) strtotime($order['order_date']))) ?></td>
-                                <td class="text-end">£<?= number_format((float) ($order['total'] ?? 0), 2) ?></td>
+                                <td class="text-nowrap"><?php echo $this->e(date('d M Y', (int) strtotime($order['order_date']))); ?></td>
+                                <td class="text-end">£<?php echo number_format((float) ($order['total'] ?? 0), 2); ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -96,14 +96,14 @@ $typeTint = static fn (string $type): string => match ($type) {
                     <?php $share = (int) $row['total'] / $typeTotal * 100; ?>
                     <div class="mb-3">
                         <div class="d-flex justify-content-between mb-1">
-                            <span><?= $this->e($row['order_type']) ?></span>
-                            <span class="text-body-secondary"><?= number_format((int) $row['total']) ?></span>
+                            <span><?php echo $this->e($row['order_type']); ?></span>
+                            <span class="text-body-secondary"><?php echo number_format((int) $row['total']); ?></span>
                         </div>
                         <div class="progress" role="progressbar" style="height: 6px"
-                             aria-label="<?= $this->e($row['order_type']) ?> share of orders"
-                             aria-valuenow="<?= round($share, 1) ?>" aria-valuemin="0" aria-valuemax="100">
-                            <div class="progress-bar bg-<?= $typeTint($row['order_type']) ?>"
-                                 style="width: <?= max(0.5, round($share, 2)) ?>%"></div>
+                             aria-label="<?php echo $this->e($row['order_type']); ?> share of orders"
+                             aria-valuenow="<?php echo round($share, 1); ?>" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar bg-<?php echo $typeTint($row['order_type']); ?>"
+                                 style="width: <?php echo max(0.5, round($share, 2)); ?>%"></div>
                         </div>
                     </div>
                 <?php endforeach; ?>

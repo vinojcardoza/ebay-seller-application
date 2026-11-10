@@ -49,8 +49,8 @@ $details = [
             <div class="card kpi-card">
                 <div class="card-body">
                     <div>
-                        <p class="kpi-value">£<?= $this->e($amount) ?></p>
-                        <p class="kpi-label"><?= $this->e($label) ?></p>
+                        <p class="kpi-value">£<?php echo $this->e($amount); ?></p>
+                        <p class="kpi-label"><?php echo $this->e($label); ?></p>
                     </div>
                 </div>
             </div>
@@ -70,8 +70,8 @@ $details = [
     <div class="card-body">
         <dl class="row detail-list mb-0">
             <?php foreach ($details as $label => $value) : ?>
-                <dt class="col-sm-4 col-lg-3"><?= $this->e($label) ?></dt>
-                <dd class="col-sm-8 col-lg-9"><?= $this->e((string) $value) ?></dd>
+                <dt class="col-sm-4 col-lg-3"><?php echo $this->e($label); ?></dt>
+                <dd class="col-sm-8 col-lg-9"><?php echo $this->e((string) $value); ?></dd>
             <?php endforeach; ?>
         </dl>
     </div>

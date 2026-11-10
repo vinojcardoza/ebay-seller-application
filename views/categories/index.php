@@ -17,7 +17,7 @@ $this->layout('layout', ['title' => 'Categories', 'breadcrumbs' => ['Categories'
 <div class="card">
     <div class="card-header">
         <h2>All categories</h2>
-        <span class="text-body-secondary"><?= count($categories) ?> categories</span>
+        <span class="text-body-secondary"><?php echo count($categories); ?> categories</span>
     </div>
 
     <?php if ($categories === []) : ?>
@@ -41,12 +41,12 @@ $this->layout('layout', ['title' => 'Categories', 'breadcrumbs' => ['Categories'
                     <?php foreach ($categories as $category) : ?>
                         <?php $parentId = $category->getParentId() ?? 0; ?>
                         <tr>
-                            <td><?= $category->getId() ?></td>
-                            <td><a href="/categories/<?= $category->getId() ?>"><?= $this->e($category->getTitle()) ?></a></td>
-                            <td><?= $parentId > 0 ? $this->e($titles[$parentId] ?? '#' . $parentId) : '—' ?></td>
-                            <td><?= $category->getMenuOrder() ?? 0 ?></td>
+                            <td><?php echo $category->getId(); ?></td>
+                            <td><a href="/categories/<?php echo $category->getId(); ?>"><?php echo $this->e($category->getTitle()); ?></a></td>
+                            <td><?php echo $parentId > 0 ? $this->e($titles[$parentId] ?? '#' . $parentId) : '—'; ?></td>
+                            <td><?php echo $category->getMenuOrder() ?? 0; ?></td>
                             <td class="text-end">
-                                <a class="btn btn-sm btn-light-primary" href="/categories/<?= $category->getId() ?>/edit">
+                                <a class="btn btn-sm btn-light-primary" href="/categories/<?php echo $category->getId(); ?>/edit">
                                     <i class="ti ti-edit" aria-hidden="true"></i> Edit
                                 </a>
                             </td>

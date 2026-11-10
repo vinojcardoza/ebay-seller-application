@@ -2,6 +2,7 @@
 
 use App\Controllers\CategoriesController;
 use App\Controllers\EbayController;
+use App\Controllers\FeedbackController;
 use App\Controllers\IndexController;
 use App\Controllers\ProductController;
 use League\Route\Router;
@@ -21,6 +22,9 @@ return function (Router $router) {
     $router->get('/categories/{id:number}/edit', [CategoriesController::class, 'edit']);
     $router->post('/categories/{id:number}', [CategoriesController::class, 'update']);
     $router->post('/categories/{id:number}/delete', [CategoriesController::class, 'delete']);
+
+    $router->get('/feedbacks', [FeedbackController::class, 'index']);
+    $router->post('/feedbacks/import', [FeedbackController::class, 'import']);
 
     $router->get('/ebay', [EbayController::class, 'index']);
     $router->get('/ebay/connect', [EbayController::class, 'connect']);
