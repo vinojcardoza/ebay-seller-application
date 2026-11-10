@@ -101,6 +101,73 @@ final class EbayConfigTest extends TestCase
     }
 
     /**
+     * EBAY_SCOPES values and the scopes they produce.
+     *
+     * @return array<string, array{string, list<string>}>
+     */
+    public static function scopesProvider(): array
+    {
+        $prefix = 'https://api.ebay.com/oauth/api_scope';
+
+        return [
+            'blank uses defaults' => ['  ', EbayConfig::SCOPES],
+            'short names, spaces' => [
+                'api_scope sell.fulfillment.readonly',
+                [$prefix, $prefix . '/sell.fulfillment.readonly'],
+            ],
+            'commas and duplicates' => [
+                'sell.fulfillment.readonly,  sell.fulfillment.readonly',
+                [$prefix . '/sell.fulfillment.readonly'],
+            ],
+            'full URLs' => [$prefix . '/commerce.feedback.readonly', [$prefix . '/commerce.feedback.readonly']],
+        ];
+    }
+
+    /**
+     * EBAY_SCOPES accepts short names or URLs, separated by spaces or commas.
+     *
+     * @param list<string> $expected
+     */
+    #[DataProvider('scopesProvider')]
+    public function testScopesFromEnvironment(string $value, array $expected): void
+    {
+        $config = EbayConfig::fromEnvironment(['EBAY_SCOPES' => $value]);
+
+        $this->assertSame($expected, $config->scopes);
+    }
+
+    /**
+     * hasScope() reports whether a scope is requested.
+     */
+    public function testHasScope(): void
+    {
+        $config = EbayConfig::fromEnvironment(['EBAY_SCOPES' => 'api_scope sell.fulfillment.readonly']);
+
+        $this->assertTrue($config->hasScope(EbayConfig::FULFILLMENT_SCOPE));
+        $this->assertFalse($config->hasScope(EbayConfig::FEEDBACK_SCOPE));
+        $this->assertTrue((new EbayConfig('id', 'secret', 'ru'))->hasScope(EbayConfig::FEEDBACK_SCOPE));
+    }
+
+    /**
+     * Scopes that are not eBay scope URLs, or an empty list, are rejected.
+     */
+    public function testRejectsInvalidScopes(): void
+    {
+        try {
+            EbayConfig::fromEnvironment(['EBAY_SCOPES' => 'https://evil.example/scope']);
+            $this->fail('Expected an exception.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertSame(
+                'EBAY_SCOPES contains "https://evil.example/scope", which is not an eBay OAuth scope.',
+                $e->getMessage()
+            );
+        }
+
+        $this->expectExceptionMessage('EBAY_SCOPES must list at least one scope.');
+        new EbayConfig('id', 'secret', 'ru', scopes: []);
+    }
+
+    /**
      * Only read-only scopes are requested.
      */
     public function testRequestsOnlyReadOnlyScopes(): void

@@ -17,6 +17,7 @@ services:
             EBAY_ENVIRONMENT: ${EBAY_ENVIRONMENT:-production}
             EBAY_MARKETPLACE_ID: ${EBAY_MARKETPLACE_ID:-EBAY_GB}
             EBAY_SELLER_USERNAME: ${EBAY_SELLER_USERNAME:-}
+            EBAY_SCOPES: ${EBAY_SCOPES:-}
         depends_on:
             - mariadb
     nginx:

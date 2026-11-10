@@ -76,6 +76,7 @@ final class EbayClientTest extends EbayTestCase
             $this->fail('Expected an exception.');
         } catch (EbayApiException $e) {
             $this->assertSame(404, $e->getStatusCode());
+            $this->assertSame('32100', $e->getErrorCode());
             $this->assertSame(
                 'eBay request GET /sell/fulfillment/v1/order/1 failed (HTTP 404): Order 1 was not found.',
                 $e->getMessage()

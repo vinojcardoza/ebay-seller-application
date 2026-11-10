@@ -48,6 +48,13 @@ class FeedbackImporter
             throw new EbayException('Set EBAY_SELLER_USERNAME to import feedback.');
         }
 
+        if (!$this->config->hasScope(EbayConfig::FEEDBACK_SCOPE)) {
+            throw new EbayException(
+                'Feedback import needs the commerce.feedback.readonly scope. Add it to EBAY_SCOPES once your'
+                . ' eBay keyset is granted it, then reconnect eBay.'
+            );
+        }
+
         $result = ['fetched' => 0, 'imported' => 0];
 
         for ($page = 0; $page < $maxPages; $page++) {

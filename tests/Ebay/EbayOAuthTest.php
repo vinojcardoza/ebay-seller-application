@@ -38,6 +38,32 @@ final class EbayOAuthTest extends EbayTestCase
     }
 
     /**
+     * The consent URL and refresh requests use the configured scopes, not the defaults.
+     */
+    public function testUsesConfiguredScopes(): void
+    {
+        $config = new EbayConfig(
+            'client-id',
+            'client-secret',
+            'Ru-Name',
+            scopes: [EbayConfig::SCOPE_PREFIX, EbayConfig::FULFILLMENT_SCOPE]
+        );
+        $factory = new \Nyholm\Psr7\Factory\Psr17Factory();
+        $oauth = new EbayOAuth($config, $this->http, $factory, $factory, $this->tokens, $this->clock);
+        $expected = EbayConfig::SCOPE_PREFIX . ' ' . EbayConfig::FULFILLMENT_SCOPE;
+
+        parse_str((string) parse_url($oauth->authorizationUrl('s'), PHP_URL_QUERY), $query);
+        $this->assertSame($expected, $query['scope']);
+
+        $this->tokens->token = $this->token('stale', '-1 minute');
+        $this->http->queueJson(['access_token' => 'fresh', 'expires_in' => 7200]);
+        $oauth->accessToken();
+
+        parse_str((string) $this->http->lastRequest()->getBody(), $form);
+        $this->assertSame($expected, $form['scope']);
+    }
+
+    /**
      * Exchanging a code posts it with Basic auth and stores both tokens with their expiries.
      */
     public function testExchangeCodeStoresTokens(): void
@@ -85,12 +111,17 @@ final class EbayOAuthTest extends EbayTestCase
             'error_description' => 'the provided authorization grant code is invalid',
         ], 400);
 
-        $this->expectException(EbayApiException::class);
-        $this->expectExceptionMessage(
-            'Exchanging the eBay authorization code failed (HTTP 400): the provided authorization grant code is invalid'
-        );
-
-        $this->oauth->exchangeCode('bad');
+        try {
+            $this->oauth->exchangeCode('bad');
+            $this->fail('Expected an exception.');
+        } catch (EbayApiException $e) {
+            $this->assertSame(
+                'Exchanging the eBay authorization code failed (HTTP 400): '
+                . 'the provided authorization grant code is invalid',
+                $e->getMessage()
+            );
+            $this->assertSame('invalid_grant', $e->getErrorCode());
+        }
     }
 
     /**

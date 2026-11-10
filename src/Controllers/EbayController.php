@@ -52,7 +52,6 @@ class EbayController extends ControllerAbstract
         'config' => 'eBay is not configured. Set EBAY_CLIENT_ID, EBAY_CLIENT_SECRET and EBAY_RU_NAME.',
         'denied' => 'eBay sign-in was cancelled or refused.',
         'state' => 'The eBay sign-in could not be verified. Please connect again.',
-        'exchange' => 'eBay rejected the authorization code. Please connect again.',
         'code' => 'Enter the authorization code, or the URL eBay redirected you to.',
         'not-connected' => 'Connect your eBay account first.',
     ];
@@ -109,6 +108,8 @@ class EbayController extends ControllerAbstract
         $state = $query['state'] ?? '';
         $code = $query['code'] ?? '';
 
+        $clearCookie = $this->stateCookie($request, '', 0);
+
         if (isset($query['error'])) {
             $target = '/ebay?error=denied';
         } elseif (!is_string($cookie) || !is_string($state) || $cookie === '' || !hash_equals($cookie, $state)) {
@@ -116,10 +117,16 @@ class EbayController extends ControllerAbstract
         } elseif (!is_string($code) || $code === '') {
             $target = '/ebay?error=code';
         } else {
-            $target = $this->exchange($code);
+            $failure = $this->exchange($code);
+
+            if ($failure !== null) {
+                return $this->renderIndex($request, $failure, 502)->withAddedHeader('Set-Cookie', $clearCookie);
+            }
+
+            $target = '/ebay?done=connected';
         }
 
-        return $this->redirect($target)->withAddedHeader('Set-Cookie', $this->stateCookie($request, '', 0));
+        return $this->redirect($target)->withAddedHeader('Set-Cookie', $clearCookie);
     }
 
     /**
@@ -130,7 +137,15 @@ class EbayController extends ControllerAbstract
     {
         $code = $this->extractCode($this->field($request, 'code'));
 
-        return $this->redirect($code === '' ? '/ebay?error=code' : $this->exchange($code));
+        if ($code === '') {
+            return $this->redirect('/ebay?error=code');
+        }
+
+        $failure = $this->exchange($code);
+
+        return $failure === null
+            ? $this->redirect('/ebay?done=connected')
+            : $this->renderIndex($request, $failure, 502);
     }
 
     /**
@@ -255,17 +270,28 @@ class EbayController extends ControllerAbstract
     }
 
     /**
-     * Exchange an authorization code and return where to redirect.
+     * Exchange an authorization code for tokens.
+     *
+     * @return string|null Null on success, otherwise eBay's reason plus a hint on how to fix it.
      */
-    private function exchange(string $code): string
+    private function exchange(string $code): ?string
     {
         try {
             $this->oauth->exchangeCode($code);
-        } catch (EbayException) {
-            return '/ebay?error=exchange';
+        } catch (EbayException $e) {
+            $hint = match ($e instanceof EbayApiException ? $e->getErrorCode() : '') {
+                'invalid_client' => 'eBay did not accept the app credentials: check that EBAY_CLIENT_SECRET is the'
+                    . ' Cert ID (Client Secret) of the same keyset as EBAY_CLIENT_ID (production Cert IDs start'
+                    . ' with "PRD-"), then restart the containers.',
+                'invalid_grant' => 'The code is invalid, expired (codes last about 5 minutes) or already used, or'
+                    . ' EBAY_RU_NAME is not the RuName you signed in with. Click Connect to get a new code.',
+                default => 'Please connect again.',
+            };
+
+            return 'Could not connect eBay. ' . $e->getMessage() . ' ' . $hint;
         }
 
-        return '/ebay?done=connected';
+        return null;
     }
 
     /**
@@ -305,12 +331,13 @@ class EbayController extends ControllerAbstract
      */
     private function extractCode(string $value): string
     {
-        if (str_contains($value, 'code=')) {
-            parse_str((string) parse_url($value, PHP_URL_QUERY), $params);
-
-            return is_string($params['code'] ?? null) ? trim($params['code']) : '';
+        // Read the code straight from the text: a decoded URL contains "#"
+        // (eBay codes do), which URL parsers treat as the start of a fragment.
+        if (preg_match('/(?:^|[?&])code=([^&\s]+)/', $value, $match)) {
+            $value = $match[1];
         }
 
+        // rawurldecode keeps "+" (eBay codes may contain it); only decode encoded input.
         return str_contains($value, '%') ? rawurldecode($value) : $value;
     }
 

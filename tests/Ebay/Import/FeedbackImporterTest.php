@@ -230,6 +230,32 @@ final class FeedbackImporterTest extends TestCase
     }
 
     /**
+     * Without the feedback scope the import explains how to enable it and calls nothing.
+     */
+    public function testRequiresFeedbackScope(): void
+    {
+        $this->em->expects($this->never())->method('flush');
+        $config = new EbayConfig(
+            'id',
+            'secret',
+            'ru',
+            EbayConfig::PRODUCTION,
+            'EBAY_GB',
+            'test-seller',
+            [EbayConfig::SCOPE_PREFIX, EbayConfig::FULFILLMENT_SCOPE]
+        );
+
+        try {
+            (new FeedbackImporter($this->em, $this->api, $config))->import();
+            $this->fail('Expected an exception.');
+        } catch (EbayException $e) {
+            $this->assertStringContainsString('needs the commerce.feedback.readonly scope', $e->getMessage());
+        }
+
+        $this->assertSame([], $this->requestedOffsets);
+    }
+
+    /**
      * Build the importer for seller "test-seller".
      */
     private function importer(): FeedbackImporter

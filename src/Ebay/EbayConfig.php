@@ -26,15 +26,26 @@ final readonly class EbayConfig
     public const SANDBOX = 'sandbox';
 
     /**
-     * OAuth scopes requested from the seller. Read-only: the app only reads
-     * orders, shipping fulfillments and feedback. Scope URLs are the same in
-     * both environments.
+     * Prefix shared by every eBay OAuth scope (the same in both environments).
      */
-    public const SCOPES = [
-        'https://api.ebay.com/oauth/api_scope',
-        'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly',
-        'https://api.ebay.com/oauth/api_scope/commerce.feedback.readonly',
-    ];
+    public const SCOPE_PREFIX = 'https://api.ebay.com/oauth/api_scope';
+
+    /**
+     * Scope for reading orders and shipping fulfillments (Fulfillment API).
+     */
+    public const FULFILLMENT_SCOPE = self::SCOPE_PREFIX . '/sell.fulfillment.readonly';
+
+    /**
+     * Scope for reading feedback (Feedback API). Not every keyset is granted it.
+     */
+    public const FEEDBACK_SCOPE = self::SCOPE_PREFIX . '/commerce.feedback.readonly';
+
+    /**
+     * Default OAuth scopes. Read-only: the app only reads orders, shipping
+     * fulfillments and feedback. Override with EBAY_SCOPES when the keyset is
+     * not granted all of them (eBay then answers "invalid_scope").
+     */
+    public const SCOPES = [self::SCOPE_PREFIX, self::FULFILLMENT_SCOPE, self::FEEDBACK_SCOPE];
 
     /**
      * Create the configuration.
@@ -45,8 +56,10 @@ final readonly class EbayConfig
      * @param string $environment `production` or `sandbox`.
      * @param string $marketplaceId Marketplace for API calls, e.g. `EBAY_GB`.
      * @param string $sellerUsername eBay username of the seller, used to fetch feedback.
+     * @param list<string> $scopes OAuth scopes to request (full scope URLs).
      *
-     * @throws InvalidArgumentException When the environment is not `production` or `sandbox`.
+     * @throws InvalidArgumentException When the environment is not `production` or `sandbox`,
+     *     or a scope is not an eBay scope URL.
      */
     public function __construct(
         public string $clientId,
@@ -56,6 +69,7 @@ final readonly class EbayConfig
         public string $environment = self::PRODUCTION,
         public string $marketplaceId = 'EBAY_GB',
         public string $sellerUsername = '',
+        public array $scopes = self::SCOPES,
     ) {
         if (!in_array($environment, [self::PRODUCTION, self::SANDBOX], true)) {
             throw new InvalidArgumentException(sprintf(
@@ -64,6 +78,19 @@ final readonly class EbayConfig
                 self::SANDBOX,
                 $environment
             ));
+        }
+
+        if ($scopes === []) {
+            throw new InvalidArgumentException('EBAY_SCOPES must list at least one scope.');
+        }
+
+        foreach ($scopes as $scope) {
+            if ($scope !== self::SCOPE_PREFIX && !str_starts_with($scope, self::SCOPE_PREFIX . '/')) {
+                throw new InvalidArgumentException(sprintf(
+                    'EBAY_SCOPES contains "%s", which is not an eBay OAuth scope.',
+                    $scope
+                ));
+            }
         }
     }
 
@@ -84,7 +111,43 @@ final readonly class EbayConfig
             $value('EBAY_ENVIRONMENT', self::PRODUCTION),
             $value('EBAY_MARKETPLACE_ID', 'EBAY_GB'),
             $value('EBAY_SELLER_USERNAME'),
+            self::parseScopes($value('EBAY_SCOPES')),
         );
+    }
+
+    /**
+     * Parse EBAY_SCOPES: scopes separated by spaces or commas, either as full
+     * URLs or short names such as `sell.fulfillment.readonly` (`api_scope` is
+     * the base scope). Empty means the defaults.
+     *
+     * @return list<string>
+     */
+    public static function parseScopes(string $value): array
+    {
+        $names = preg_split('/[\s,]+/', trim($value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($names === []) {
+            return self::SCOPES;
+        }
+
+        $scopes = array_map(
+            static fn (string $name): string => match (true) {
+                str_starts_with($name, 'https://') => $name,
+                $name === 'api_scope' => self::SCOPE_PREFIX,
+                default => self::SCOPE_PREFIX . '/' . $name,
+            },
+            $names
+        );
+
+        return array_values(array_unique($scopes));
+    }
+
+    /**
+     * Whether a scope is among those requested.
+     */
+    public function hasScope(string $scope): bool
+    {
+        return in_array($scope, $this->scopes, true);
     }
 
     /**

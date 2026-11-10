@@ -57,6 +57,12 @@ $matchBadge = static fn (?string $match): string => match ($match) {
                         <dt class="col-sm-5">Reconnect by</dt>
                         <dd class="col-sm-7"><?php echo $connection->refreshTokenExpiresAt->format('d M Y'); ?></dd>
                     <?php endif; ?>
+                    <dt class="col-sm-5">Scopes</dt>
+                    <dd class="col-sm-7 small">
+                        <?php foreach ($config->scopes as $scope) : ?>
+                            <div><?php echo $this->e(substr($scope, strlen(\App\Ebay\EbayConfig::SCOPE_PREFIX)) ?: 'api_scope'); ?></div>
+                        <?php endforeach; ?>
+                    </dd>
                 </dl>
 
                 <?php if (!$config->isConfigured()) : ?>
@@ -113,9 +119,15 @@ $matchBadge = static fn (?string $match): string => match ($match) {
                     <div>
                         <strong>Feedback</strong>
                         <p class="mb-0 small">New feedback left by buyers.</p>
+                        <?php if (!$config->hasScope(\App\Ebay\EbayConfig::FEEDBACK_SCOPE)) : ?>
+                            <p class="mb-0 small text-body-secondary">
+                                Needs the <code>commerce.feedback.readonly</code> scope in <code>EBAY_SCOPES</code>.
+                            </p>
+                        <?php endif; ?>
                     </div>
                     <form method="post" action="/ebay/feedback">
-                        <button type="submit" class="btn btn-light-primary" <?php echo $connection === null ? 'disabled' : ''; ?>>
+                        <button type="submit" class="btn btn-light-primary"
+                            <?php echo $connection === null || !$config->hasScope(\App\Ebay\EbayConfig::FEEDBACK_SCOPE) ? 'disabled' : ''; ?>>
                             <i class="ti ti-message-star" aria-hidden="true"></i> Import feedback
                         </button>
                     </form>

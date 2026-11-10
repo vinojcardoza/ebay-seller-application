@@ -47,7 +47,7 @@ class EbayOAuth
             'client_id' => $this->config->clientId,
             'redirect_uri' => $this->config->ruName,
             'response_type' => 'code',
-            'scope' => implode(' ', EbayConfig::SCOPES),
+            'scope' => implode(' ', $this->config->scopes),
             'state' => $state,
         ], '', '&', PHP_QUERY_RFC3986);
     }
@@ -104,7 +104,7 @@ class EbayOAuth
         $data = $this->tokenRequest('Refreshing the eBay access token', [
             'grant_type' => 'refresh_token',
             'refresh_token' => $token->refreshToken,
-            'scope' => implode(' ', EbayConfig::SCOPES),
+            'scope' => implode(' ', $this->config->scopes),
         ]);
 
         $token = $token->withAccessToken(

@@ -110,6 +110,27 @@ final class EbayControllerTest extends TestCase
     }
 
     /**
+     * The page lists the requested scopes, and disables feedback import without its scope.
+     */
+    public function testIndexShowsScopesAndFeedbackScopeHint(): void
+    {
+        $this->connected();
+        $this->fulfillment->method('ordersCreatedSince')->willReturn([]);
+        $this->importer->method('preview')->willReturn([]);
+
+        $default = $this->body($this->controller()->index($this->get('/ebay')));
+        $this->assertStringContainsString('/commerce.feedback.readonly', $default);
+        $this->assertStringNotContainsString('Needs the <code>commerce.feedback.readonly</code>', $default);
+
+        $limited = $this->body($this->controller(scopes: [EbayConfig::SCOPE_PREFIX, EbayConfig::FULFILLMENT_SCOPE])
+            ->index($this->get('/ebay')));
+        $this->assertStringContainsString('<div>api_scope</div>', $limited);
+        $this->assertStringContainsString('<div>/sell.fulfillment.readonly</div>', $limited);
+        $this->assertStringContainsString('Needs the <code>commerce.feedback.readonly</code> scope', $limited);
+        $this->assertMatchesRegularExpression('#action="/ebay/feedback">\s*<button[^>]*\s+disabled>#', $limited);
+    }
+
+    /**
      * When connected, recent orders for the chosen period are listed newest first with their status.
      */
     public function testIndexListsRecentOrders(): void
@@ -317,18 +338,71 @@ final class EbayControllerTest extends TestCase
     }
 
     /**
-     * A code eBay refuses leads back with an error.
+     * A code eBay refuses shows eBay's reason on the page (502) and clears the state cookie.
      */
     public function testCallbackExchangeFailure(): void
     {
-        $this->oauthMock()->expects($this->once())->method('exchangeCode')
-            ->willThrowException(new EbayApiException('invalid_grant', 400));
+        $this->oauthMock()->expects($this->once())->method('exchangeCode')->willThrowException(
+            EbayApiException::fromResponse(
+                'Exchanging the eBay authorization code',
+                400,
+                '{"error":"invalid_grant","error_description":"the provided authorization grant code is invalid"}'
+            )
+        );
 
         $response = $this->controller()->callback(
             $this->get('/ebay/callback', ['code' => 'c', 'state' => 'abc'], ['ebay_oauth_state' => 'abc'])
         );
+        $body = html_entity_decode($this->body($response), ENT_QUOTES);
 
-        $this->assertRedirect('/ebay?error=exchange', $response);
+        $this->assertSame(502, $response->getStatusCode());
+        $this->assertStringContainsString('the provided authorization grant code is invalid', $body);
+        $this->assertStringContainsString('codes last about 5 minutes', $body);
+        $this->assertStringContainsString(
+            'ebay_oauth_state=; Path=/ebay; Max-Age=0',
+            $response->getHeaderLine('Set-Cookie')
+        );
+    }
+
+    /**
+     * eBay error codes and the hint shown for them.
+     *
+     * @return array<string, array{string, string}>
+     */
+    public static function exchangeErrorProvider(): array
+    {
+        return [
+            'wrong client secret' => [
+                '{"error":"invalid_client","error_description":"client authentication failed"}',
+                'check that EBAY_CLIENT_SECRET is the Cert ID (Client Secret)',
+            ],
+            'expired or reused code' => [
+                '{"error":"invalid_grant","error_description":"the provided authorization grant code is invalid"}',
+                'Click Connect to get a new code.',
+            ],
+            'anything else' => ['{"error":"server_error"}', 'Please connect again.'],
+        ];
+    }
+
+    /**
+     * A failed manual connection shows eBay's reason and a hint for that error.
+     */
+    #[DataProvider('exchangeErrorProvider')]
+    public function testSubmitCodeExplainsFailure(string $ebayResponse, string $hint): void
+    {
+        $this->oauthMock()->expects($this->once())->method('exchangeCode')->willThrowException(
+            EbayApiException::fromResponse('Exchanging the eBay authorization code', 401, $ebayResponse)
+        );
+
+        $response = $this->controller()->submitCode($this->post('/ebay/code', ['code' => 'v^1.1#code']));
+        $body = html_entity_decode($this->body($response), ENT_QUOTES);
+
+        $this->assertSame(502, $response->getStatusCode());
+        $this->assertStringContainsString(
+            'Could not connect eBay. Exchanging the eBay authorization code failed',
+            $body
+        );
+        $this->assertStringContainsString($hint, $body);
     }
 
     /**
@@ -341,6 +415,14 @@ final class EbayControllerTest extends TestCase
         return [
             'raw code' => ['v^1.1#i^1#code', 'v^1.1#i^1#code'],
             'url-encoded code' => ['v%5E1.1%23i%5E1%23code', 'v^1.1#i^1#code'],
+            'decoded URL with # and +' => [
+                'https://example.com/ebay/callback?state=x&code=v^1.1#i^1#t^Ul4+eA==&expires_in=299',
+                'v^1.1#i^1#t^Ul4+eA==',
+            ],
+            'encoded URL keeps +' => [
+                'https://example.com/ebay/callback?code=v%5E1.1%23t%5EUl4%2BeA%3D%3D&expires_in=299',
+                'v^1.1#t^Ul4+eA==',
+            ],
             'redirect URL' => [
                 'https://example.com/ebay/callback?state=x&code=v%5E1.1%23i%5E1%23code&expires_in=299',
                 'v^1.1#i^1#code',
@@ -540,8 +622,10 @@ final class EbayControllerTest extends TestCase
 
     /**
      * Build the controller; the entity manager fails the test on any write.
+     *
+     * @param list<string> $scopes OAuth scopes in the configuration.
      */
-    private function controller(bool $configured = true): EbayController
+    private function controller(bool $configured = true, array $scopes = EbayConfig::SCOPES): EbayController
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $em->expects($this->never())->method('persist');
@@ -550,7 +634,7 @@ final class EbayControllerTest extends TestCase
 
         $factory = new Psr17Factory();
         $config = $configured
-            ? new EbayConfig('id', 'secret', 'ru', EbayConfig::PRODUCTION, 'EBAY_GB', 'test-seller')
+            ? new EbayConfig('id', 'secret', 'ru', EbayConfig::PRODUCTION, 'EBAY_GB', 'test-seller', $scopes)
             : new EbayConfig('', '', '');
 
         return new EbayController(
