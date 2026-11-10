@@ -1,57 +1,57 @@
 services:
-    php:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        container_name: business_app_php
-        volumes:
-            - .:/var/www/html
-        environment:
-            MARIADB_DATABASE: ${MARIADB_DATABASE}
-            MARIADB_USER: ${MARIADB_USER}
-            MARIADB_PASSWORD: ${MARIADB_PASSWORD}
-            MARIADB_HOST: mariadb
-            EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
-            EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
-            EBAY_RU_NAME: ${EBAY_RU_NAME:-}
-            EBAY_ENVIRONMENT: ${EBAY_ENVIRONMENT:-production}
-            EBAY_MARKETPLACE_ID: ${EBAY_MARKETPLACE_ID:-EBAY_GB}
-            EBAY_SELLER_USERNAME: ${EBAY_SELLER_USERNAME:-}
-            EBAY_SCOPES: ${EBAY_SCOPES:-}
-        depends_on:
-            - mariadb
-    nginx:
-        image: nginx:alpine
-        container_name: business_app_nginx
-        ports:
-            - '8181:80'
-        volumes:
-            - .:/var/www/html
-            - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-        depends_on:
-            - php
-    mariadb:
-        image: mariadb:11
-        container_name: business_app_mariadb
-        restart: unless-stopped
-        environment:
-            MARIADB_DATABASE: ${MARIADB_DATABASE}
-            MARIADB_USER: ${MARIADB_USER}
-            MARIADB_PASSWORD: ${MARIADB_PASSWORD}
-            MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
-        volumes:
-            - business_app_mariadb_data:/var/lib/mysql
-    phpmyadmin:
-        image: phpmyadmin:latest
-        container_name: business_app_phpmyadmin
-        restart: unless-stopped
-        ports:
-            - '8182:80'
-        environment:
-            PMA_HOST: mariadb
-            PMA_PORT: 3306
-            UPLOAD_LIMIT: 300M
-        depends_on:
-            - mariadb
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: business_app_php
+    volumes:
+      - .:/var/www/html
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_HOST: mariadb
+      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
+      EBAY_RU_NAME: ${EBAY_RU_NAME:-}
+      EBAY_ENVIRONMENT: ${EBAY_ENVIRONMENT:-production}
+      EBAY_MARKETPLACE_ID: ${EBAY_MARKETPLACE_ID:-EBAY_GB}
+      EBAY_SELLER_USERNAME: ${EBAY_SELLER_USERNAME:-}
+      EBAY_SCOPES: ${EBAY_SCOPES:-}
+    depends_on:
+      - mariadb
+  nginx:
+    image: nginx:alpine
+    container_name: business_app_nginx
+    ports:
+      - "8181:80"
+    volumes:
+      - .:/var/www/html
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - php
+  mariadb:
+    image: mariadb:11
+    container_name: business_app_mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - business_app_mariadb_data:/var/lib/mysql
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: business_app_phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8182:80"
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 300M
+    depends_on:
+      - mariadb
 volumes:
-    business_app_mariadb_data:
+  business_app_mariadb_data:

@@ -1,5 +1,5 @@
 /**
- * Admin theme behaviour: mobile sidebar drawer and light/dark theme toggle.
+ * Admin theme behaviour: collapsible header navigation and light/dark theme toggle.
  */
 (function () {
     'use strict';
@@ -109,18 +109,25 @@
             });
         });
 
-        document.querySelectorAll('[data-sidebar-toggle]').forEach(function (el) {
+        /**
+         * Open or close the collapsed header navigation and sync the toggle's aria-expanded.
+         */
+        function setNavOpen(open) {
+            document.body.classList.toggle('nav-open', open);
+            document.querySelectorAll('[data-nav-toggle]').forEach(function (btn) {
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+        }
+
+        document.querySelectorAll('[data-nav-toggle]').forEach(function (el) {
             el.addEventListener('click', function () {
-                var open = document.body.classList.toggle('sidebar-open');
-                document.querySelectorAll('.app-sidebar-toggle').forEach(function (btn) {
-                    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-                });
+                setNavOpen(!document.body.classList.contains('nav-open'));
             });
         });
 
         document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
-                document.body.classList.remove('sidebar-open');
+                setNavOpen(false);
             }
         });
 

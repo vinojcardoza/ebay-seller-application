@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Layout: Admin shell with sidebar navigation, header and page header.
+ * Layout: Admin shell with a top navigation header and page header.
  *
  * Views set these through `$this->layout('layout', [...])`:
  *
@@ -59,45 +59,40 @@ $isActive = static function (array $item) use ($path): bool {
     <link rel="stylesheet" href="/assets/css/app.css">
 </head>
 <body>
-    <aside class="app-sidebar" id="app-sidebar" aria-label="Main navigation">
+    <header class="app-header">
         <a class="app-brand" href="/">
             <span class="app-brand-mark"><i class="ti ti-building-store" aria-hidden="true"></i></span>
             Business
         </a>
 
-        <ul class="app-nav">
-            <li class="app-nav-caption">Navigation</li>
-            <?php foreach ($navItems as $item) : ?>
-                <?php $active = $isActive($item); ?>
-                <li>
-                    <a class="app-nav-link<?php echo $active ? ' active' : ''; ?>" href="<?php echo $item['url']; ?>"
-                        <?php echo $active ? 'aria-current="page"' : ''; ?>>
-                        <i class="ti <?php echo $item['icon']; ?>" aria-hidden="true"></i>
-                        <span><?php echo $this->e($item['label']); ?></span>
-                    </a>
-                </li>
-            <?php endforeach; ?>
-        </ul>
+        <nav class="app-nav" id="app-nav" aria-label="Main navigation">
+            <ul>
+                <?php foreach ($navItems as $item) : ?>
+                    <?php $active = $isActive($item); ?>
+                    <li>
+                        <a class="app-nav-link<?php echo $active ? ' active' : ''; ?>" href="<?php echo $item['url']; ?>"
+                            <?php echo $active ? 'aria-current="page"' : ''; ?>>
+                            <i class="ti <?php echo $item['icon']; ?>" aria-hidden="true"></i>
+                            <span><?php echo $this->e($item['label']); ?></span>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </nav>
 
-        <div class="app-sidebar-footer">Business App</div>
-    </aside>
-    <div class="app-backdrop" data-sidebar-toggle></div>
-
-    <div class="app-main">
-        <header class="app-header">
-            <button type="button" class="app-icon-btn app-sidebar-toggle" data-sidebar-toggle
-                    aria-controls="app-sidebar" aria-expanded="false" aria-label="Toggle navigation">
+        <div class="app-user">
+            <button type="button" class="app-icon-btn" data-theme-toggle aria-label="Switch to dark mode">
+                <i class="ti ti-moon" aria-hidden="true"></i>
+            </button>
+            <span class="app-avatar" aria-hidden="true"><i class="ti ti-user"></i></span>
+            <button type="button" class="app-icon-btn app-nav-toggle" data-nav-toggle
+                    aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
                 <i class="ti ti-menu-2" aria-hidden="true"></i>
             </button>
+        </div>
+    </header>
 
-            <div class="app-user">
-                <button type="button" class="app-icon-btn" data-theme-toggle aria-label="Switch to dark mode">
-                    <i class="ti ti-moon" aria-hidden="true"></i>
-                </button>
-                <span class="app-avatar" aria-hidden="true"><i class="ti ti-user"></i></span>
-            </div>
-        </header>
-
+    <div class="app-main">
         <main class="app-content">
             <div class="app-page-header">
                 <div>
