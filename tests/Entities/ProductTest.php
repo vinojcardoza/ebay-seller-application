@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Entities;
 
+use App\Entities\Category;
 use App\Entities\Product;
 use DateTime;
 use DateTimeInterface;
@@ -51,6 +52,26 @@ final class ProductTest extends TestCase
     }
 
     /**
+     * Related-record collections start empty.
+     */
+    public function testCollectionsStartEmpty(): void
+    {
+        $product = new Product();
+
+        $this->assertCount(0, $product->getPurchases());
+        $this->assertCount(0, $product->getOrderItems());
+    }
+
+    /**
+     * Status constants match the values the legacy app stores.
+     */
+    public function testStatusConstants(): void
+    {
+        $this->assertSame(1, Product::STATUS_ACTIVE);
+        $this->assertSame(2, Product::STATUS_INACTIVE);
+    }
+
+    /**
      * Provides setter name, getter name and a sample value for each property.
      *
      * @return array<string, array{string, string, mixed}>
@@ -58,7 +79,7 @@ final class ProductTest extends TestCase
     public static function propertyProvider(): array
     {
         return [
-            'category' => ['setCategory', 'getCategory', 3],
+            'category' => ['setCategory', 'getCategory', new Category()],
             'sku' => ['setSku', 'getSku', 'SKU-001'],
             'barcode upc' => ['setBarcodeUpc', 'getBarcodeUpc', '012345678905'],
             'code' => ['setCode', 'getCode', 'C-100'],

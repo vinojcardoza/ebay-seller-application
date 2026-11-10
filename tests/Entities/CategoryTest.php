@@ -44,6 +44,14 @@ final class CategoryTest extends TestCase
     }
 
     /**
+     * A new category has no products.
+     */
+    public function testProductsStartEmpty(): void
+    {
+        $this->assertCount(0, (new Category())->getProducts());
+    }
+
+    /**
      * Provides setter name, getter name and a sample value for each property.
      *
      * @return array<string, array{string, string, mixed}>

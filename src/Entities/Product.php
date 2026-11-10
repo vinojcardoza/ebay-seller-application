@@ -6,6 +6,8 @@ namespace App\Entities;
 
 use DateTime;
 use DateTimeInterface;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -22,6 +24,16 @@ use Doctrine\ORM\Mapping as ORM;
 class Product
 {
     /**
+     * Status of a product that is on sale.
+     */
+    public const STATUS_ACTIVE = 1;
+
+    /**
+     * Status of a product that is no longer sold.
+     */
+    public const STATUS_INACTIVE = 2;
+
+    /**
      * Primary key.
      */
     #[ORM\Id]
@@ -30,10 +42,11 @@ class Product
     private int $id;
 
     /**
-     * Category ID (foreign key to `categories.id`).
+     * Category this product belongs to (`category` column, references `categories.id`).
      */
-    #[ORM\Column(type: Types::BIGINT, nullable: true)]
-    private ?int $category = null;
+    #[ORM\ManyToOne(targetEntity: Category::class, inversedBy: "products")]
+    #[ORM\JoinColumn(name: "category", referencedColumnName: "id")]
+    private ?Category $category = null;
 
     /**
      * Stock keeping unit, unique across products.
@@ -144,17 +157,35 @@ class Product
     private ?DateTimeInterface $updated = null;
 
     /**
-     * Product status (1 = active).
+     * Status: 1 = active, 2 = inactive (see the STATUS_* constants). Some imported rows hold 0.
      */
     #[ORM\Column(type: Types::INTEGER, nullable: true, options: ["default" => 1])]
-    private ?int $status = 1;
+    private ?int $status = self::STATUS_ACTIVE;
 
     /**
-     * Initialise the entity with the creation timestamp set to now.
+     * Stock purchases of this product.
+     *
+     * @var Collection<int, Purchase>
+     */
+    #[ORM\OneToMany(targetEntity: Purchase::class, mappedBy: "product")]
+    private Collection $purchases;
+
+    /**
+     * Order lines that sold this product.
+     *
+     * @var Collection<int, OrderItem>
+     */
+    #[ORM\OneToMany(targetEntity: OrderItem::class, mappedBy: "product")]
+    private Collection $orderItems;
+
+    /**
+     * Initialise the entity with the creation timestamp set to now and empty purchases and order items.
      */
     public function __construct()
     {
         $this->created = new DateTime();
+        $this->purchases = new ArrayCollection();
+        $this->orderItems = new ArrayCollection();
     }
 
     /**
@@ -166,17 +197,17 @@ class Product
     }
 
     /**
-     * Get the category ID.
+     * Get the category.
      */
-    public function getCategory(): ?int
+    public function getCategory(): ?Category
     {
         return $this->category;
     }
 
     /**
-     * Set the category ID.
+     * Set the category.
      */
-    public function setCategory(?int $category): self
+    public function setCategory(?Category $category): self
     {
         $this->category = $category;
 
@@ -505,5 +536,25 @@ class Product
         $this->status = $status;
 
         return $this;
+    }
+
+    /**
+     * Get the stock purchases of this product.
+     *
+     * @return Collection<int, Purchase>
+     */
+    public function getPurchases(): Collection
+    {
+        return $this->purchases;
+    }
+
+    /**
+     * Get the order lines that sold this product.
+     *
+     * @return Collection<int, OrderItem>
+     */
+    public function getOrderItems(): Collection
+    {
+        return $this->orderItems;
     }
 }

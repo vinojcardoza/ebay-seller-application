@@ -6,6 +6,8 @@ namespace App\Entities;
 
 use DateTime;
 use DateTimeInterface;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -13,7 +15,8 @@ use Doctrine\ORM\Mapping as ORM;
  * Category entity mapped to the `categories` table.
  *
  * Categories form a hierarchy through `parent_id`, where 0 marks a top-level
- * category.
+ * category. `parent_id` is a plain ID rather than an association because no
+ * category has ID 0.
  */
 #[ORM\Entity]
 #[ORM\Table(name: "categories")]
@@ -58,11 +61,20 @@ class Category
     private ?DateTimeInterface $updated = null;
 
     /**
-     * Initialise the entity with the creation timestamp set to now.
+     * Products in this category.
+     *
+     * @var Collection<int, Product>
+     */
+    #[ORM\OneToMany(targetEntity: Product::class, mappedBy: "category")]
+    private Collection $products;
+
+    /**
+     * Initialise the entity with the creation timestamp set to now and no products.
      */
     public function __construct()
     {
         $this->created = new DateTime();
+        $this->products = new ArrayCollection();
     }
 
     /**
@@ -161,5 +173,15 @@ class Category
         $this->updated = $updated;
 
         return $this;
+    }
+
+    /**
+     * Get the products in this category.
+     *
+     * @return Collection<int, Product>
+     */
+    public function getProducts(): Collection
+    {
+        return $this->products;
     }
 }

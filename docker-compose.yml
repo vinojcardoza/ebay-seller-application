@@ -11,6 +11,12 @@ services:
             MARIADB_USER: ${MARIADB_USER}
             MARIADB_PASSWORD: ${MARIADB_PASSWORD}
             MARIADB_HOST: mariadb
+            EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+            EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
+            EBAY_RU_NAME: ${EBAY_RU_NAME:-}
+            EBAY_ENVIRONMENT: ${EBAY_ENVIRONMENT:-production}
+            EBAY_MARKETPLACE_ID: ${EBAY_MARKETPLACE_ID:-EBAY_GB}
+            EBAY_SELLER_USERNAME: ${EBAY_SELLER_USERNAME:-}
         depends_on:
             - mariadb
     nginx:

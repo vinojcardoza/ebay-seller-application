@@ -5,7 +5,6 @@
  *
  * @var \League\Plates\Template\Template $this
  * @var list<\App\Entities\Product> $products
- * @var array<int, string> $categories Category titles keyed by ID.
  */
 
 $this->layout('layout', ['title' => 'Products', 'breadcrumbs' => ['Products' => null]]);
@@ -35,14 +34,14 @@ $this->layout('layout', ['title' => 'Products', 'breadcrumbs' => ['Products' => 
                 </thead>
                 <tbody>
                     <?php foreach ($products as $product) : ?>
-                        <?php $categoryId = $product->getCategory(); ?>
+                        <?php $category = $product->getCategory(); ?>
                         <tr>
                             <td class="text-nowrap"><?= $this->e($product->getSku()) ?></td>
                             <td><a href="/product/<?= $product->getId() ?>"><?= $this->e($product->getTitle()) ?></a></td>
-                            <td><?= $categoryId !== null ? $this->e($categories[$categoryId] ?? '#' . $categoryId) : '—' ?></td>
+                            <td><?= $category !== null ? $this->e($category->getTitle()) : '—' ?></td>
                             <td class="text-end">£<?= $this->e($product->getPrice()) ?></td>
                             <td>
-                                <?php if ($product->getStatus() === 1) : ?>
+                                <?php if ($product->getStatus() === \App\Entities\Product::STATUS_ACTIVE) : ?>
                                     <span class="badge tint-success">Active</span>
                                 <?php else : ?>
                                     <span class="badge tint-danger">Inactive</span>

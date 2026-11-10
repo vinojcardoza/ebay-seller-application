@@ -7,3 +7,9 @@
 composer.lock
 package-lock.json
 .phpunit.cache
+
+# Legacy app reference code: contains hardcoded eBay credentials, never commit
+/legacy/
+
+# Runtime data (eBay OAuth tokens)
+/var/

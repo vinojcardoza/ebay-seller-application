@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Entities\Category;
+use App\Entities\CustomSku;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
 use DateTime;
@@ -352,10 +353,7 @@ class CategoriesController extends ControllerAbstract
         $counts = [
             'subcategory' => $this->repository()->count(['parentId' => $id]),
             'product' => $this->em->getRepository(Product::class)->count(['category' => $id]),
-            'custom SKU' => (int) $this->em->getConnection()->fetchOne(
-                'SELECT COUNT(*) FROM custom_skus WHERE category = ?',
-                [$id]
-            ),
+            'custom SKU' => $this->em->getRepository(CustomSku::class)->count(['category' => $id]),
         ];
 
         $blockers = [];

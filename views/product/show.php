@@ -5,7 +5,6 @@
  *
  * @var \League\Plates\Template\Template $this
  * @var \App\Entities\Product $product
- * @var array<int, string> $categories Category titles keyed by ID.
  */
 
 $this->layout('layout', [
@@ -13,7 +12,7 @@ $this->layout('layout', [
     'breadcrumbs' => ['Products' => '/products', $product->getSku() => null],
 ]);
 
-$categoryId = $product->getCategory();
+$category = $product->getCategory();
 $updated = $product->getUpdated();
 
 $pricing = [
@@ -27,7 +26,7 @@ $details = [
     'SKU' => $product->getSku(),
     'Code' => $product->getCode(),
     'Barcode / UPC' => $product->getBarcodeUpc(),
-    'Category' => $categoryId !== null ? ($categories[$categoryId] ?? '#' . $categoryId) : '—',
+    'Category' => $category !== null ? $category->getTitle() : '—',
     'Shipping service' => $product->getShippingService() ?? '—',
     'Low stock threshold' => (string) ($product->getLowStock() ?? '—'),
     'Promo percentage' => $product->getPromoPercentage() . '%',
@@ -62,7 +61,7 @@ $details = [
 <div class="card">
     <div class="card-header">
         <h2>Details</h2>
-        <?php if ($product->getStatus() === 1) : ?>
+        <?php if ($product->getStatus() === \App\Entities\Product::STATUS_ACTIVE) : ?>
             <span class="badge tint-success">Active</span>
         <?php else : ?>
             <span class="badge tint-danger">Inactive</span>

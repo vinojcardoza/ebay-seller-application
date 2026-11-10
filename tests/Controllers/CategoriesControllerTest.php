@@ -6,11 +6,11 @@ namespace Tests\Controllers;
 
 use App\Controllers\CategoriesController;
 use App\Entities\Category;
+use App\Entities\CustomSku;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\PlatesRender;
 use DateTimeInterface;
-use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -44,7 +44,7 @@ final class CategoriesControllerTest extends TestCase
     private int $productCount = 0;
 
     /**
-     * Number of custom SKUs the fake DBAL connection reports for any category.
+     * Number of custom SKUs the fake custom SKU repository reports for any category.
      */
     private int $customSkuCount = 0;
 
@@ -74,16 +74,14 @@ final class CategoriesControllerTest extends TestCase
         $this->addCategory(3, 'Tennis', 2, 0);
         $this->addCategory(4, 'Racket Grip', 3, 0);
 
-        $connection = $this->createStub(Connection::class);
-        $connection->method('fetchOne')->willReturnCallback(fn (): int => $this->customSkuCount);
-
         $this->em = $this->createMock(EntityManagerInterface::class);
         $this->em->method('getRepository')->willReturnCallback(
-            fn (string $class): EntityRepository => $class === Product::class
-                ? $this->productRepository()
-                : $this->categoryRepository()
+            fn (string $class): EntityRepository => match ($class) {
+                Product::class => $this->countingRepository(fn (): int => $this->productCount),
+                CustomSku::class => $this->countingRepository(fn (): int => $this->customSkuCount),
+                default => $this->categoryRepository(),
+            }
         );
-        $this->em->method('getConnection')->willReturn($connection);
 
         $factory = new Psr17Factory();
         $this->controller = new CategoriesController(new PlatesRender(), $factory, $factory, $this->em);
@@ -561,14 +559,16 @@ final class CategoriesControllerTest extends TestCase
     }
 
     /**
-     * Fake product repository whose count() returns $this->productCount.
+     * Fake repository whose count() returns the given callback's result.
      *
-     * @return EntityRepository<Product>
+     * @param callable(): int $count
+     *
+     * @return EntityRepository<object>
      */
-    private function productRepository(): EntityRepository
+    private function countingRepository(callable $count): EntityRepository
     {
         $repository = $this->createStub(EntityRepository::class);
-        $repository->method('count')->willReturnCallback(fn (): int => $this->productCount);
+        $repository->method('count')->willReturnCallback($count);
 
         return $repository;
     }

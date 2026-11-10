@@ -20,6 +20,7 @@ $navItems = [
     ['label' => 'Dashboard', 'url' => '/', 'icon' => 'ti-layout-dashboard'],
     ['label' => 'Products', 'url' => '/products', 'icon' => 'ti-package', 'match' => '/product'],
     ['label' => 'Categories', 'url' => '/categories', 'icon' => 'ti-category'],
+    ['label' => 'eBay', 'url' => '/ebay', 'icon' => 'ti-shopping-bag'],
 ];
 
 /**

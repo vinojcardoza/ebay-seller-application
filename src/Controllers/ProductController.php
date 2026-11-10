@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Entities\Category;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
 use Psr\Http\Message\ResponseInterface;
@@ -24,7 +23,6 @@ class ProductController extends ControllerAbstract
 
         return $this->render('product/index', [
             'products' => $products,
-            'categories' => $this->categoryTitles(),
         ]);
     }
 
@@ -43,23 +41,6 @@ class ProductController extends ControllerAbstract
 
         return $this->render('product/show', [
             'product' => $product,
-            'categories' => $this->categoryTitles(),
         ]);
-    }
-
-    /**
-     * Map category IDs to titles, for showing category names.
-     *
-     * @return array<int, string>
-     */
-    private function categoryTitles(): array
-    {
-        $titles = [];
-
-        foreach ($this->em->getRepository(Category::class)->findAll() as $category) {
-            $titles[$category->getId()] = $category->getTitle();
-        }
-
-        return $titles;
     }
 }
