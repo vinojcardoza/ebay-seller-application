@@ -245,7 +245,8 @@ final class OrderImporterTest extends TestCase
     }
 
     /**
-     * A custom SKU expands into its products, sharing the sale and fee by bundle price × quantity.
+     * A custom SKU expands into its products, sharing the sale and fee by each line's price
+     * (a line's price covers all of its units).
      */
     public function testImportExpandsCustomSkuBundle(): void
     {
@@ -269,7 +270,7 @@ final class OrderImporterTest extends TestCase
         $this->assertSame('2.10', $order->getPostageCost());
         $this->assertSame('0.12', $order->getPackagingCost());
         $this->assertSame(
-            [['LCD-1602', 2, '4.50', '0.75'], ['RES-10K', 4, '4.50', '0.75']],
+            [['LCD-1602', 2, '6.00', '1.00'], ['RES-10K', 4, '3.00', '0.50']],
             array_map(
                 static fn (OrderItem $i): array => [
                     $i->getProduct()?->getSku(),

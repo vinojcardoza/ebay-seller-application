@@ -1,6 +1,7 @@
 <?php
 
 use App\Controllers\CategoriesController;
+use App\Controllers\CustomSkusController;
 use App\Controllers\EbayController;
 use App\Controllers\FeedbackController;
 use App\Controllers\IndexController;
@@ -22,6 +23,21 @@ return function (Router $router) {
     $router->get('/categories/{id:number}/edit', [CategoriesController::class, 'edit']);
     $router->post('/categories/{id:number}', [CategoriesController::class, 'update']);
     $router->post('/categories/{id:number}/delete', [CategoriesController::class, 'delete']);
+
+    $router->get('/custom-skus', [CustomSkusController::class, 'index']);
+    $router->get('/custom-skus/create', [CustomSkusController::class, 'create']);
+    $router->post('/custom-skus', [CustomSkusController::class, 'store']);
+    $router->get('/custom-skus/{id:number}', [CustomSkusController::class, 'show']);
+    $router->get('/custom-skus/{id:number}/edit', [CustomSkusController::class, 'edit']);
+    $router->post('/custom-skus/{id:number}', [CustomSkusController::class, 'update']);
+    $router->post('/custom-skus/{id:number}/delete', [CustomSkusController::class, 'delete']);
+    $router->post('/custom-skus/{id:number}/products', [CustomSkusController::class, 'addLine']);
+    $router->get('/custom-skus/{id:number}/products/{lineId:number}/edit', [CustomSkusController::class, 'editLine']);
+    $router->post('/custom-skus/{id:number}/products/{lineId:number}', [CustomSkusController::class, 'updateLine']);
+    $router->post(
+        '/custom-skus/{id:number}/products/{lineId:number}/delete',
+        [CustomSkusController::class, 'removeLine']
+    );
 
     $router->get('/feedbacks', [FeedbackController::class, 'index']);
     $router->post('/feedbacks/import', [FeedbackController::class, 'import']);

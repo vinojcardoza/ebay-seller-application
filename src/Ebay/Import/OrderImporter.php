@@ -250,7 +250,8 @@ class OrderImporter
 
     /**
      * Add one OrderItem per product in a custom SKU bundle. The line's sale and
-     * fees are shared by each product's configured bundle price × quantity.
+     * fees are shared in proportion to each line's configured price, which is
+     * the price for all of that line's units (e.g. £11.99 for a 3-pack).
      */
     private function addBundleItems(
         Order $order,
@@ -262,8 +263,7 @@ class OrderImporter
     ): void {
         $components = $this->bundleComponents($customSku);
         $weights = array_map(
-            static fn (CustomSkuProduct $component): int => Money::toPence($component->getPrice())
-                * max(1, $component->getQuantity() ?? 1),
+            static fn (CustomSkuProduct $component): int => Money::toPence($component->getPrice()),
             $components
         );
         $sales = Money::split($salePence, $weights);
