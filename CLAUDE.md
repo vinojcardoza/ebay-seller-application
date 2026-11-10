@@ -44,6 +44,16 @@ Every class, property, constant and method you write or change — in `src/`, `c
 
 Do not leave existing code you touch without doc blocks.
 
+## Tests (required)
+
+Every entity and every controller must have PHPUnit tests. When you add or change one, add or update its tests in the same change, and run `composer phpunit` (all tests must pass) before finishing.
+
+- **Location**: mirror `src/` under `tests/` with a `Test` suffix and `Tests\` namespace — `src/Entities/Product.php` → `tests/Entities/ProductTest.php`, `src/Controllers/CategoriesController.php` → `tests/Controllers/CategoriesControllerTest.php`. Mark classes `final` and add `#[CoversClass(...)]`.
+- **Entities**: cover the constructor (e.g. `created` initialised), defaults matching the table's column defaults, every setter/getter round-trip and fluent return, and that nullable setters accept `null`. Follow `tests/Entities/ProductTest.php`.
+- **Controllers**: test every action without the database. Build the controller with a real `PlatesRender` and Nyholm `Psr17Factory`, and a PHPUnit mock of `EntityManagerInterface` (plus mocked repositories / DBAL `Connection` as needed). For each action assert the status code, `Location` header on redirects, and key content in the body. Cover the success path and each failure path: not found (404), validation errors (422), refused actions (e.g. 409), and that `persist`/`flush`/`remove` are called (or not) as expected.
+- **Data providers**: return arrays (`public static function xProvider(): array { return ['case name' => [...]]; }`), not `yield`; use `#[DataProvider('xProvider')]`.
+- Tests need doc blocks too (see above): one line per test saying the behaviour verified.
+
 ## Architecture
 
 Request lifecycle: `public/index.php` → `src/bootstrap.php`, which:
@@ -62,6 +72,8 @@ Key wiring in `config/definitions.php`:
 
 **Adding a page**: add an action to a controller, register it in `config/routes.php`, and add a view under `views/`.
 
-**Views** (`views/`) are Plates templates. Each view calls `$this->layout('layout', ['title' => ...])`; `views/layout.php` outputs `$this->section('content')`. Use `$this->e()` for escaping. `App\Framework\Template\Renderer` is an older plain-PHP (`extract` + `require`) renderer that is not wired into the container.
+**Views** (`views/`) are Plates templates. Each view calls `$this->layout('layout', ['title' => ..., 'breadcrumbs' => ['Label' => '/url', 'Current' => null]])`; `views/layout.php` is the admin shell (sidebar nav, header, page header with breadcrumb) and outputs `$this->section('content')`, plus an optional `actions` section (`$this->start('actions')`…`$this->stop()`) for page-header buttons. Use `$this->e()` for escaping. Add sidebar links to `$navItems` in the layout.
+
+**Front end**: Bootstrap 5.3.3 and Tabler Icons (`ti ti-*`) from jsDelivr, Inter from Google Fonts (14px base, theme spacing: 74px header, 264px sidebar, 25px card padding, 24px card gaps), and the app's own theme in `public/assets/css/app.css` (design tokens on `:root`, dark mode via `data-bs-theme`) and `public/assets/js/app.js` (theme toggle, mobile sidebar, `form[data-confirm]` prompts). Wrap content in `.card` (with `.card-header` + `<h2>`); use `.table.table-hover` inside `.table-responsive`, `.btn-primary` / `.btn-light-{primary,danger,secondary}`, `.badge.tint-{primary,success,warning,danger,info}`, and Bootstrap's `.is-invalid` / `.invalid-feedback` for form errors. nginx serves files in `public/` directly. `App\Framework\Template\Renderer` is an older plain-PHP (`extract` + `require`) renderer that is not wired into the container.
 
 **Entities** (`src/Entities`) are Doctrine entities mapped with PHP attributes (`#[ORM\Entity]`, `#[ORM\Table]`, etc.) against the existing MariaDB schema; there are no migrations.

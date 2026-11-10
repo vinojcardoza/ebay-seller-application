@@ -7,10 +7,12 @@
  * @var string $message
  */
 
-$this->layout('layout', ['title' => 'Not found']);
+$this->layout('layout', ['title' => 'Not found', 'breadcrumbs' => ['Not found' => null]]);
 ?>
-<h1>Not found</h1>
-
-<p><?= $this->e($message) ?></p>
-
-<p><a href="/">Go to the dashboard</a></p>
+<div class="card">
+    <div class="empty-state">
+        <i class="ti ti-error-404" aria-hidden="true"></i>
+        <p class="mb-3"><?= $this->e($message) ?></p>
+        <a class="btn btn-primary" href="/"><i class="ti ti-home" aria-hidden="true"></i> Go to the dashboard</a>
+    </div>
+</div>

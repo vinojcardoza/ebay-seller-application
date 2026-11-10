@@ -1,26 +1,57 @@
 <?php
 
 /**
- * View: Products List
+ * View: Products list.
+ *
+ * @var \League\Plates\Template\Template $this
+ * @var list<\App\Entities\Product> $products
+ * @var array<int, string> $categories Category titles keyed by ID.
  */
 
-$this->layout('layout', ['title' => 'Products']);
+$this->layout('layout', ['title' => 'Products', 'breadcrumbs' => ['Products' => null]]);
 ?>
-<h1>Products List</h1>
+<div class="card">
+    <div class="card-header">
+        <h2>All products</h2>
+        <span class="text-body-secondary"><?= number_format(count($products)) ?> products</span>
+    </div>
 
-<table>
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Title</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php foreach($products as $product):?>
-            <tr>
-                <td><?php echo $product->getId();?></td>
-                <td><?php echo $product->getTitle();?></td>
-            </tr>
-        <?php endforeach;?>
-    </tbody>
-</table>
+    <?php if ($products === []) : ?>
+        <div class="empty-state">
+            <i class="ti ti-package-off" aria-hidden="true"></i>
+            No products yet.
+        </div>
+    <?php else : ?>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th class="text-end">Price</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($products as $product) : ?>
+                        <?php $categoryId = $product->getCategory(); ?>
+                        <tr>
+                            <td class="text-nowrap"><?= $this->e($product->getSku()) ?></td>
+                            <td><a href="/product/<?= $product->getId() ?>"><?= $this->e($product->getTitle()) ?></a></td>
+                            <td><?= $categoryId !== null ? $this->e($categories[$categoryId] ?? '#' . $categoryId) : '—' ?></td>
+                            <td class="text-end">£<?= $this->e($product->getPrice()) ?></td>
+                            <td>
+                                <?php if ($product->getStatus() === 1) : ?>
+                                    <span class="badge tint-success">Active</span>
+                                <?php else : ?>
+                                    <span class="badge tint-danger">Inactive</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</div>

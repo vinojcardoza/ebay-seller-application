@@ -10,60 +10,95 @@
  * @var list<string> $errors Reasons a delete was refused.
  */
 
-$this->layout('layout', ['title' => $category->getTitle()]);
+$this->layout('layout', [
+    'title' => $category->getTitle(),
+    'breadcrumbs' => ['Categories' => '/categories', $category->getTitle() => null],
+]);
 $updated = $category->getUpdated();
 ?>
-<h1><?= $this->e($category->getTitle()) ?></h1>
+<?php $this->start('actions') ?>
+    <a class="btn btn-light-secondary" href="/categories"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back</a>
+    <a class="btn btn-primary" href="/categories/<?= $category->getId() ?>/edit">
+        <i class="ti ti-edit" aria-hidden="true"></i> Edit
+    </a>
+<?php $this->stop() ?>
 
 <?php if ($errors !== []) : ?>
-    <article>
+    <div class="alert alert-danger" role="alert">
         <strong>This category can't be deleted.</strong>
-        <ul>
+        <ul class="mb-0 mt-1">
             <?php foreach ($errors as $error) : ?>
                 <li><?= $this->e($error) ?></li>
             <?php endforeach; ?>
         </ul>
-    </article>
+    </div>
 <?php endif; ?>
 
-<dl>
-    <dt>ID</dt>
-    <dd><?= $category->getId() ?></dd>
+<div class="row">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <h2>Details</h2>
+            </div>
+            <div class="card-body">
+                <dl class="row detail-list mb-0">
+                    <dt class="col-sm-4">ID</dt>
+                    <dd class="col-sm-8"><?= $category->getId() ?></dd>
 
-    <dt>Parent</dt>
-    <dd>
-        <?php if ($parent !== null) : ?>
-            <a href="/categories/<?= $parent->getId() ?>"><?= $this->e($parent->getTitle()) ?></a>
-        <?php else : ?>
-            None (top level)
-        <?php endif; ?>
-    </dd>
+                    <dt class="col-sm-4">Parent</dt>
+                    <dd class="col-sm-8">
+                        <?php if ($parent !== null) : ?>
+                            <a href="/categories/<?= $parent->getId() ?>"><?= $this->e($parent->getTitle()) ?></a>
+                        <?php else : ?>
+                            None (top level)
+                        <?php endif; ?>
+                    </dd>
 
-    <dt>Menu order</dt>
-    <dd><?= $category->getMenuOrder() ?? 0 ?></dd>
+                    <dt class="col-sm-4">Menu order</dt>
+                    <dd class="col-sm-8"><?= $category->getMenuOrder() ?? 0 ?></dd>
 
-    <dt>Created</dt>
-    <dd><?= $category->getCreated()->format('Y-m-d H:i') ?></dd>
+                    <dt class="col-sm-4">Created</dt>
+                    <dd class="col-sm-8"><?= $category->getCreated()->format('d M Y H:i') ?></dd>
 
-    <dt>Updated</dt>
-    <dd><?= $updated !== null ? $updated->format('Y-m-d H:i') : '—' ?></dd>
-</dl>
+                    <dt class="col-sm-4">Updated</dt>
+                    <dd class="col-sm-8 mb-0"><?= $updated !== null ? $updated->format('d M Y H:i') : '—' ?></dd>
+                </dl>
+            </div>
+        </div>
 
-<?php if ($children !== []) : ?>
-    <h2>Subcategories</h2>
-    <ul>
-        <?php foreach ($children as $child) : ?>
-            <li><a href="/categories/<?= $child->getId() ?>"><?= $this->e($child->getTitle()) ?></a></li>
-        <?php endforeach; ?>
-    </ul>
-<?php endif; ?>
+        <div class="card">
+            <div class="card-header">
+                <h2>Delete category</h2>
+            </div>
+            <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <p class="mb-0">Only possible when no subcategories, products or custom SKUs use it.</p>
+                <form method="post" action="/categories/<?= $category->getId() ?>/delete"
+                      data-confirm="Delete this category?">
+                    <button type="submit" class="btn btn-light-danger">
+                        <i class="ti ti-trash" aria-hidden="true"></i> Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
 
-<p>
-    <a href="/categories/<?= $category->getId() ?>/edit">Edit</a> ·
-    <a href="/categories">Back to categories</a>
-</p>
-
-<form method="post" action="/categories/<?= $category->getId() ?>/delete"
-      onsubmit="return confirm('Delete this category?');">
-    <button type="submit">Delete category</button>
-</form>
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">
+                <h2>Subcategories</h2>
+                <span class="badge tint-primary"><?= count($children) ?></span>
+            </div>
+            <?php if ($children === []) : ?>
+                <div class="empty-state">No subcategories.</div>
+            <?php else : ?>
+                <ul class="list-group list-group-flush">
+                    <?php foreach ($children as $child) : ?>
+                        <li class="list-group-item bg-transparent px-4">
+                            <a href="/categories/<?= $child->getId() ?>"><?= $this->e($child->getTitle()) ?></a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>

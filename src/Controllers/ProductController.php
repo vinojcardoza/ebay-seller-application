@@ -4,44 +4,62 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Entities\Category;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
-use App\Framework\Template\RendererInterface;
-use Nyholm\Psr7\Factory\Psr17Factory;
-use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Message\StreamFactoryInterface;
 
 /**
- * Class ProductController
- *
- * @package App\Controllers
+ * Product list and detail pages.
  */
 class ProductController extends ControllerAbstract
 {
     /**
-     * @return ResponseInterface
+     * List all products, ordered by title.
      */
     public function index(): ResponseInterface
     {
-        $repository = $this->em->getRepository(Product::class);
+        $products = $this->em->getRepository(Product::class)->findBy([], ['title' => 'ASC']);
 
-        $products = $repository->findAll();
-
-        return $this->render('/product/index', [
-            'products' => $products
+        return $this->render('product/index', [
+            'products' => $products,
+            'categories' => $this->categoryTitles(),
         ]);
     }
 
     /**
-     * @param ServerRequestInterface $request
-     * @param array $args
+     * Show a single product.
      *
-     * @return ResponseInterface
+     * @param array<string, string> $args Route placeholders, including `id`.
      */
     public function show(ServerRequestInterface $request, array $args = []): ResponseInterface
     {
-        return $this->render('/product/show', $args);
+        $product = $this->em->getRepository(Product::class)->find((int) ($args['id'] ?? 0));
+
+        if ($product === null) {
+            return $this->notFound('Product not found.');
+        }
+
+        return $this->render('product/show', [
+            'product' => $product,
+            'categories' => $this->categoryTitles(),
+        ]);
+    }
+
+    /**
+     * Map category IDs to titles, for showing category names.
+     *
+     * @return array<int, string>
+     */
+    private function categoryTitles(): array
+    {
+        $titles = [];
+
+        foreach ($this->em->getRepository(Category::class)->findAll() as $category) {
+            $titles[$category->getId()] = $category->getTitle();
+        }
+
+        return $titles;
     }
 }

@@ -8,36 +8,52 @@
  * @var array<int, string> $titles Category titles keyed by ID, for parent names.
  */
 
-$this->layout('layout', ['title' => 'Categories']);
+$this->layout('layout', ['title' => 'Categories', 'breadcrumbs' => ['Categories' => null]]);
 ?>
-<h1>Categories</h1>
+<?php $this->start('actions') ?>
+    <a class="btn btn-primary" href="/categories/create"><i class="ti ti-plus" aria-hidden="true"></i> Add category</a>
+<?php $this->stop() ?>
 
-<p><a href="/categories/create">Add category</a></p>
+<div class="card">
+    <div class="card-header">
+        <h2>All categories</h2>
+        <span class="text-body-secondary"><?= count($categories) ?> categories</span>
+    </div>
 
-<?php if ($categories === []) : ?>
-    <p>No categories yet.</p>
-<?php else : ?>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Parent</th>
-                <th>Menu order</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($categories as $category) : ?>
-                <?php $parentId = $category->getParentId() ?? 0; ?>
-                <tr>
-                    <td><?= $category->getId() ?></td>
-                    <td><a href="/categories/<?= $category->getId() ?>"><?= $this->e($category->getTitle()) ?></a></td>
-                    <td><?= $parentId > 0 ? $this->e($titles[$parentId] ?? '#' . $parentId) : '—' ?></td>
-                    <td><?= $category->getMenuOrder() ?? 0 ?></td>
-                    <td><a href="/categories/<?= $category->getId() ?>/edit">Edit</a></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-<?php endif; ?>
+    <?php if ($categories === []) : ?>
+        <div class="empty-state">
+            <i class="ti ti-category" aria-hidden="true"></i>
+            No categories yet. <a href="/categories/create">Add the first one</a>.
+        </div>
+    <?php else : ?>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Title</th>
+                        <th>Parent</th>
+                        <th>Menu order</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($categories as $category) : ?>
+                        <?php $parentId = $category->getParentId() ?? 0; ?>
+                        <tr>
+                            <td><?= $category->getId() ?></td>
+                            <td><a href="/categories/<?= $category->getId() ?>"><?= $this->e($category->getTitle()) ?></a></td>
+                            <td><?= $parentId > 0 ? $this->e($titles[$parentId] ?? '#' . $parentId) : '—' ?></td>
+                            <td><?= $category->getMenuOrder() ?? 0 ?></td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-light-primary" href="/categories/<?= $category->getId() ?>/edit">
+                                    <i class="ti ti-edit" aria-hidden="true"></i> Edit
+                                </a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</div>

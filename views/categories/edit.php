@@ -10,16 +10,24 @@
  * @var list<\App\Entities\Category> $parents
  */
 
-$this->layout('layout', ['title' => 'Edit ' . $category->getTitle()]);
+$this->layout('layout', [
+    'title' => 'Edit category',
+    'breadcrumbs' => [
+        'Categories' => '/categories',
+        $category->getTitle() => '/categories/' . $category->getId(),
+        'Edit' => null,
+    ],
+]);
 ?>
-<h1>Edit category</h1>
-
-<?php $this->insert('categories/_form', [
-    'action' => '/categories/' . $category->getId(),
-    'submitLabel' => 'Save changes',
-    'values' => $values,
-    'errors' => $errors,
-    'parents' => $parents,
-]) ?>
-
-<p><a href="/categories/<?= $category->getId() ?>">Cancel</a></p>
+<div class="row">
+    <div class="col-xl-8">
+        <?php $this->insert('categories/_form', [
+            'action' => '/categories/' . $category->getId(),
+            'submitLabel' => 'Save changes',
+            'cancelUrl' => '/categories/' . $category->getId(),
+            'values' => $values,
+            'errors' => $errors,
+            'parents' => $parents,
+        ]) ?>
+    </div>
+</div>

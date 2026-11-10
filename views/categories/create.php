@@ -9,16 +9,20 @@
  * @var list<\App\Entities\Category> $parents
  */
 
-$this->layout('layout', ['title' => 'Add category']);
+$this->layout('layout', [
+    'title' => 'Add category',
+    'breadcrumbs' => ['Categories' => '/categories', 'Add' => null],
+]);
 ?>
-<h1>Add category</h1>
-
-<?php $this->insert('categories/_form', [
-    'action' => '/categories',
-    'submitLabel' => 'Create category',
-    'values' => $values,
-    'errors' => $errors,
-    'parents' => $parents,
-]) ?>
-
-<p><a href="/categories">Cancel</a></p>
+<div class="row">
+    <div class="col-xl-8">
+        <?php $this->insert('categories/_form', [
+            'action' => '/categories',
+            'submitLabel' => 'Create category',
+            'cancelUrl' => '/categories',
+            'values' => $values,
+            'errors' => $errors,
+            'parents' => $parents,
+        ]) ?>
+    </div>
+</div>
