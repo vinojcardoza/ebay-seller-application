@@ -57,6 +57,9 @@ class Category
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?DateTimeInterface $updated = null;
 
+    /**
+     * Initialise the entity with the creation timestamp set to now.
+     */
     public function __construct()
     {
         $this->created = new DateTime();

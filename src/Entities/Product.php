@@ -149,6 +149,9 @@ class Product
     #[ORM\Column(type: Types::INTEGER, nullable: true, options: ["default" => 1])]
     private ?int $status = 1;
 
+    /**
+     * Initialise the entity with the creation timestamp set to now.
+     */
     public function __construct()
     {
         $this->created = new DateTime();

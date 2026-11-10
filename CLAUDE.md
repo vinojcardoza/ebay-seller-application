@@ -32,7 +32,17 @@ vendor/bin/phpunit --filter testName tests   # single test
 npm run watch        # gulp: on save of src/config/tests PHP files, run phpcbf → phpcs → phpstan
 ```
 
-Coding standard is PSR-12 (`phpcs.xml`); the PSR1 side-effects rule is excluded only for `bootstrap.php`. PHPStan ignores `missingType.iterableValue` and `property.onlyRead`. The `tests/` directory currently has no tests.
+Coding standard is PSR-12 (`phpcs.xml`); the PSR1 side-effects rule is excluded only for `bootstrap.php`. PHPStan ignores `missingType.iterableValue` and `property.onlyRead`. `phpunit.xml` bootstraps `vendor/autoload.php`, so a globally installed `phpunit` (e.g. Homebrew) also works from the project root. Tests live in `tests/` under the `Tests\` namespace, mirroring `src/` (e.g. `tests/Entities/ProductTest.php`).
+
+## Doc blocks (required)
+
+Every class, property, constant and method you write or change — in `src/`, `config/` and `tests/`, including constructors, test methods and data providers — must have a `/** ... */` doc block:
+
+- Start with a one-line summary of what it is or does (for tests: the behaviour being verified).
+- Add `@param` / `@return` / `@throws` only when they add information the native type doesn't, such as array shapes or iterable value types (e.g. `@return iterable<string, array{string, string}>`).
+- For entity properties, describe the column's meaning, not just its name.
+
+Do not leave existing code you touch without doc blocks.
 
 ## Architecture
 
