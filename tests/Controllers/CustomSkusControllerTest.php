@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Controllers;
 
+use App\Catalog\CategoryPaths;
 use App\Controllers\CustomSkusController;
 use App\Entities\Category;
 use App\Entities\CustomSku;
@@ -106,7 +107,13 @@ final class CustomSkusControllerTest extends TestCase
         });
 
         $factory = new Psr17Factory();
-        $this->controller = new CustomSkusController(new PlatesRender(), $factory, $factory, $em);
+        $this->controller = new CustomSkusController(
+            new PlatesRender(),
+            $factory,
+            $factory,
+            $em,
+            new CategoryPaths($em)
+        );
     }
 
     // ---------- index ----------

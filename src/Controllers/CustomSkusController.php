@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Catalog\CategoryPaths;
 use App\Entities\Category;
 use App\Entities\CustomSku;
 use App\Entities\CustomSkuProduct;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
+use App\Framework\Template\RendererInterface;
 use DateTime;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 /**
  * Custom SKUs: listings sold under their own SKU that bundle one or more
@@ -44,6 +49,19 @@ class CustomSkusController extends ControllerAbstract
         'line-removed' => 'Product removed from the custom SKU.',
         'deleted' => 'Custom SKU deleted.',
     ];
+
+    /**
+     * Create the controller.
+     */
+    public function __construct(
+        RendererInterface $renderer,
+        StreamFactoryInterface $stream,
+        ResponseFactoryInterface $factory,
+        EntityManagerInterface $em,
+        private readonly CategoryPaths $categoryPaths,
+    ) {
+        parent::__construct($renderer, $stream, $factory, $em);
+    }
 
     /**
      * List custom SKUs with their products, optionally filtered by SKU text and status.
@@ -335,7 +353,7 @@ class CustomSkusController extends ControllerAbstract
             'customSku' => $customSku,
             'values' => $values,
             'errors' => $errors,
-            'categories' => $this->categoryOptions(),
+            'categories' => $this->categoryPaths->labels(),
         ], $errors === [] ? 200 : 422);
     }
 
@@ -534,40 +552,6 @@ class CustomSkusController extends ControllerAbstract
             ->setQuantity((int) $values['quantity'])
             ->setPrice($this->money($values['price']))
             ->setFees($this->money($values['fees']));
-    }
-
-    /**
-     * Categories for the select, labelled with their full path (e.g. "Sports › Tennis").
-     *
-     * @return array<int, string> Labels keyed by category ID, sorted by label.
-     */
-    private function categoryOptions(): array
-    {
-        $categories = [];
-
-        foreach ($this->em->getRepository(Category::class)->findAll() as $category) {
-            $categories[$category->getId()] = $category;
-        }
-
-        $options = [];
-
-        foreach ($categories as $id => $category) {
-            $path = [$category->getTitle()];
-            $seen = [$id => true];
-            $parentId = $category->getParentId() ?? 0;
-
-            while ($parentId > 0 && isset($categories[$parentId]) && !isset($seen[$parentId])) {
-                $seen[$parentId] = true;
-                array_unshift($path, $categories[$parentId]->getTitle());
-                $parentId = $categories[$parentId]->getParentId() ?? 0;
-            }
-
-            $options[$id] = implode(' › ', $path);
-        }
-
-        asort($options, SORT_NATURAL | SORT_FLAG_CASE);
-
-        return $options;
     }
 
     /**

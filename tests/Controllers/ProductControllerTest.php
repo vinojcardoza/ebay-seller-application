@@ -4,29 +4,31 @@ declare(strict_types=1);
 
 namespace Tests\Controllers;
 
+use App\Catalog\CategoryPaths;
 use App\Controllers\ProductController;
 use App\Entities\Category;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\PlatesRender;
 use DateTime;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
 use ReflectionProperty;
 
 /**
- * Tests for every ProductController action, using real views and an
- * in-memory fake of the product repository instead of the database.
+ * Tests for ProductController: the list (columns, stock, search, filters,
+ * pagination) and the detail page, using real views and in-memory fakes.
  */
 #[CoversClass(ProductController::class)]
 #[CoversClass(ControllerAbstract::class)]
+#[CoversClass(CategoryPaths::class)]
 final class ProductControllerTest extends TestCase
 {
     /**
@@ -37,11 +39,25 @@ final class ProductControllerTest extends TestCase
     private array $products = [];
 
     /**
-     * Fake product repository; `find()` reads from $this->products.
+     * Categories held by the fake repository, keyed by ID.
      *
-     * @var EntityRepository<Product>&Stub
+     * @var array<int, Category>
      */
-    private EntityRepository&Stub $repository;
+    private array $categories = [];
+
+    /**
+     * Rows the stock query returns.
+     *
+     * @var list<array<string, int|string|null>>
+     */
+    private array $stockRows = [];
+
+    /**
+     * Arguments of the last product findBy() call.
+     *
+     * @var list<mixed>|null
+     */
+    private ?array $findByArgs = null;
 
     /**
      * Controller under test.
@@ -49,100 +65,217 @@ final class ProductControllerTest extends TestCase
     private ProductController $controller;
 
     /**
-     * Build the controller with two seeded products: an active one in the
-     * Electronics category and an inactive one with no category.
+     * Seed categories Electronics (1) and Sports (2) › Tennis (3), and three products:
+     * 10 LCD (Electronics, CRL48, low stock: 5 left of threshold 10),
+     * 11 Socks (no category, inactive, CRL48, out of stock),
+     * 12 Grip (Tennis, TOLP48, 90 in stock and 20 incoming).
      */
     protected function setUp(): void
     {
-        $electronics = (new Category())->setTitle('Electronics');
-        $this->setId($electronics, 1);
-
         $this->products = [];
-        $this->addProduct($this->product(10, 'LCD-1602', 'LCD Display 16x2', $electronics));
+        $this->categories = [];
+        $this->findByArgs = null;
+
+        $this->addCategory(1, 'Electronics', 0);
+        $this->addCategory(2, 'Sports', 0);
+        $this->addCategory(3, 'Tennis', 2);
+
+        $this->addProduct($this->product(10, 'LCD-1602', 'LCD Display 16x2', $this->categories[1]));
         $this->addProduct(
             $this->product(11, 'SCK-WHT', 'White Socks', null)->setStatus(Product::STATUS_INACTIVE)
         );
-
-        $this->repository = $this->createStub(EntityRepository::class);
-        $this->repository->method('find')->willReturnCallback(
-            fn (mixed $id): ?Product => $this->products[(int) $id] ?? null
+        $this->addProduct(
+            $this->product(12, 'GRIP-TNS', 'Tennis Grip', $this->categories[3])->setShippingService('TOLP48')
         );
 
-        $this->controller = $this->controllerWith($this->repository);
+        $this->stockRows = [
+            ['id' => 10, 'low_stock' => 10, 'delivered' => '50', 'pending' => '0', 'sold' => '45'],
+            ['id' => 11, 'low_stock' => 10, 'delivered' => '0', 'pending' => '0', 'sold' => '0'],
+            ['id' => 12, 'low_stock' => 10, 'delivered' => '100', 'pending' => '20', 'sold' => '10'],
+        ];
+
+        $this->controller = $this->controller();
     }
 
-    // ---------- index ----------
+    // ---------- index: columns ----------
 
     /**
-     * The list asks for all products ordered by title.
+     * Each row shows ID, product, category path, prices, promotion, shipping, multi-buy, stock and status.
      */
-    public function testIndexLoadsProductsOrderedByTitle(): void
+    public function testIndexShowsAllColumns(): void
     {
-        $repository = $this->createMock(EntityRepository::class);
-        $repository->expects($this->once())
-            ->method('findBy')
-            ->with([], ['title' => 'ASC'])
-            ->willReturn(array_values($this->products));
+        $body = $this->body($this->index());
 
-        $this->assertSame(200, $this->controllerWith($repository)->index()->getStatusCode());
+        foreach (
+            ['ID', 'Product', 'Category', 'Selling price', 'Fees', 'Promotion', 'Shipping service', 'Postage',
+                'Package', 'Multi-buy 2 / 3 / 4', 'Stock', 'Status'] as $heading
+        ) {
+            $this->assertMatchesRegularExpression('#<th[^>]*>' . preg_quote($heading, '#') . '</th>#', $body);
+        }
+
+        $row = $this->rowFor($body, 10);
+        $this->assertStringContainsString('>10</td>', $row);
+        $this->assertStringContainsString('<a href="/product/10">LCD Display 16x2</a>', $row);
+        $this->assertStringContainsString('LCD-1602', $row);
+        $this->assertStringContainsString('Electronics', $row);
+
+        foreach (['£4.50', '£0.68', '7.50%', 'CRL48', '£1.55', '£0.12', '2 / 5 / 10'] as $value) {
+            $this->assertStringContainsString($value, $row);
+        }
+
+        $this->assertStringContainsString('<strong>5</strong>', $row);
+        $this->assertStringContainsString('tint-warning">Low', $row);
+        $this->assertStringContainsString('tint-success">Active', $row);
+        $this->assertStringContainsString('Sports › Tennis', $this->rowFor($body, 12));
     }
 
     /**
-     * Each row shows the SKU, a link to the product, its category, price and status.
+     * Stock is delivered minus sold; out-of-stock and incoming units are flagged.
      */
-    public function testIndexListsProductDetails(): void
+    public function testIndexStockStates(): void
     {
-        $this->repository->method('findBy')->willReturn(array_values($this->products));
+        $body = $this->body($this->index());
 
-        $body = (string) $this->controller->index()->getBody();
+        $socks = $this->rowFor($body, 11);
+        $this->assertStringContainsString('<strong>0</strong>', $socks);
+        $this->assertStringContainsString('tint-danger">Out of stock', $socks);
+        $this->assertStringContainsString('tint-danger">Inactive', $socks);
 
-        $this->assertStringContainsString('2 products', $body);
-        $this->assertStringContainsString('LCD-1602', $body);
-        $this->assertStringContainsString('<a href="/product/10">LCD Display 16x2</a>', $body);
-        $this->assertStringContainsString('<td>Electronics</td>', $body);
-        $this->assertStringContainsString('£4.50', $body);
-        $this->assertSame(1, substr_count($body, 'tint-success">Active</span>'));
-        $this->assertSame(1, substr_count($body, 'tint-danger">Inactive</span>'));
+        $grip = $this->rowFor($body, 12);
+        $this->assertStringContainsString('<strong>90</strong>', $grip);
+        $this->assertStringNotContainsString('Low', $grip);
+        $this->assertStringContainsString('+20 incoming', $grip);
+
+        foreach (['Out of stock (1)', 'Low stock (1)', 'In stock (1)', 'Awaiting delivery (1)'] as $option) {
+            $this->assertMatchesRegularExpression('#>\s*' . preg_quote($option, '#') . '\s*</option>#', $body);
+        }
     }
 
     /**
-     * A product without a category shows a dash in the category column.
+     * Products are loaded once, ordered by title.
      */
-    public function testIndexShowsDashForProductWithoutCategory(): void
+    public function testIndexLoadsProductsByTitle(): void
     {
-        $this->repository->method('findBy')->willReturn([$this->products[11]]);
+        $body = $this->body($this->index());
 
-        $body = (string) $this->controller->index()->getBody();
-
-        $this->assertStringContainsString('<td>—</td>', $body);
+        $this->assertSame([[], ['title' => 'ASC']], $this->findByArgs);
+        $this->assertLessThan(strpos($body, 'Tennis Grip'), strpos($body, 'LCD Display'));
+        $this->assertLessThan(strpos($body, 'White Socks'), strpos($body, 'Tennis Grip'));
+        $this->assertStringContainsString('3 products', $body);
     }
 
     /**
-     * Product titles are HTML-escaped in the list.
+     * Titles are HTML-escaped.
      */
     public function testIndexEscapesTitles(): void
     {
-        $this->repository->method('findBy')->willReturn([
-            $this->product(12, 'XSS-1', '<script>alert(1)</script>', null),
-        ]);
+        $this->addProduct($this->product(13, 'XSS-1', '<script>alert(1)</script>', null));
 
-        $body = (string) $this->controller->index()->getBody();
+        $body = $this->body($this->index());
 
         $this->assertStringNotContainsString('<script>alert(1)</script>', $body);
         $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $body);
     }
 
+    // ---------- index: search & filters ----------
+
     /**
-     * With no products the list shows an empty state instead of a table.
+     * Filters and the product IDs they should leave.
+     *
+     * @return array<string, array{array<string, string>, list<int>}>
      */
-    public function testIndexShowsEmptyStateWhenThereAreNoProducts(): void
+    public static function filterProvider(): array
     {
-        $this->repository->method('findBy')->willReturn([]);
+        return [
+            'search title' => [['q' => 'lcd'], [10]],
+            'search SKU' => [['q' => 'grip-tns'], [12]],
+            'search code' => [['q' => 'CODE-11'], [11]],
+            'search barcode' => [['q' => '0123456789012'], [12]],
+            'category' => [['category' => '1'], [10]],
+            'category includes subcategories' => [['category' => '2'], [12]],
+            'out of stock' => [['stock' => 'out'], [11]],
+            'low stock' => [['stock' => 'low'], [10]],
+            'in stock' => [['stock' => 'in'], [12]],
+            'awaiting delivery' => [['stock' => 'pending'], [12]],
+            'shipping service' => [['shipping' => 'TOLP48'], [12]],
+            'active' => [['status' => 'active'], [10, 12]],
+            'inactive' => [['status' => 'inactive'], [11]],
+            'combined' => [['status' => 'active', 'shipping' => 'CRL48', 'stock' => 'low'], [10]],
+            'invalid values ignored' => [
+                ['category' => '99', 'stock' => 'bogus', 'shipping' => 'NOPE', 'status' => 'x'],
+                [10, 11, 12],
+            ],
+        ];
+    }
 
-        $body = (string) $this->controller->index()->getBody();
+    /**
+     * Search and filters narrow the list and are kept in the form.
+     *
+     * @param array<string, string> $query
+     * @param list<int> $expected Product IDs that should be listed.
+     */
+    #[DataProvider('filterProvider')]
+    public function testIndexFilters(array $query, array $expected): void
+    {
+        $body = $this->body($this->index($query));
 
-        $this->assertStringContainsString('No products yet.', $body);
-        $this->assertStringNotContainsString('<table', $body);
+        foreach ([10, 11, 12] as $id) {
+            in_array($id, $expected, true)
+                ? $this->assertStringContainsString('href="/product/' . $id . '"', $body)
+                : $this->assertStringNotContainsString('href="/product/' . $id . '"', $body);
+        }
+    }
+
+    /**
+     * Active filters are shown as selected, the count says "x of y", and Clear appears.
+     */
+    public function testIndexKeepsFilterState(): void
+    {
+        $body = $this->body($this->index(['q' => 'grip', 'category' => '2', 'stock' => 'in', 'shipping' => 'TOLP48']));
+
+        $this->assertStringContainsString('1 of 3 products', $body);
+        $this->assertStringContainsString('value="grip"', $body);
+        $this->assertMatchesRegularExpression('#<option value="2" selected>\s*Sports\s*</option>#', $body);
+        $this->assertMatchesRegularExpression('#<option value="in" selected>#', $body);
+        $this->assertMatchesRegularExpression('#<option value="TOLP48" selected>#', $body);
+        $this->assertStringContainsString('href="/products">Clear', $body);
+    }
+
+    /**
+     * Empty states distinguish "no matches" from "no products".
+     */
+    public function testIndexEmptyStates(): void
+    {
+        $this->assertStringContainsString(
+            'No products match these filters.',
+            $this->body($this->index(['q' => 'zzz']))
+        );
+
+        $this->products = [];
+        $this->stockRows = [];
+        $this->assertStringContainsString('No products yet.', $this->body($this->index()));
+    }
+
+    // ---------- index: pagination ----------
+
+    /**
+     * 50 products per page; links keep the filters; out-of-range pages are clamped.
+     */
+    public function testIndexPaginates(): void
+    {
+        for ($id = 100; $id < 160; $id++) {
+            $this->addProduct($this->product($id, "BULK-$id", "Bulk item $id", $this->categories[1]));
+        }
+
+        $first = $this->body($this->index(['category' => '1']));
+        $this->assertSame(50, substr_count($first, '<td class="product-cell">'));
+        $this->assertStringContainsString('Page 1 of 2', $first);
+        $this->assertStringContainsString('href="/products?category=1&amp;page=2"', $first);
+
+        $last = $this->body($this->index(['category' => '1', 'page' => '99']));
+        $this->assertSame(11, substr_count($last, '<td class="product-cell">'));
+        $this->assertStringContainsString('Page 2 of 2', $last);
+        $this->assertStringNotContainsString('No products', $last);
     }
 
     // ---------- show ----------
@@ -153,7 +286,7 @@ final class ProductControllerTest extends TestCase
     public function testShowDisplaysProductDetails(): void
     {
         $response = $this->controller->show($this->request(), ['id' => '10']);
-        $body = (string) $response->getBody();
+        $body = $this->body($response);
 
         $this->assertSame(200, $response->getStatusCode());
         $this->assertStringContainsString('<h1>LCD Display 16x2</h1>', $body);
@@ -169,7 +302,7 @@ final class ProductControllerTest extends TestCase
                 'Code' => 'CODE-10',
                 'Barcode / UPC' => '0123456789010',
                 'Category' => 'Electronics',
-                'Shipping service' => 'Royal Mail 2nd Class',
+                'Shipping service' => 'CRL48',
                 'Promo percentage' => '7.50%',
                 'Multi-buy tiers' => '2 / 5 / 10',
                 'Updated' => '—',
@@ -192,7 +325,7 @@ final class ProductControllerTest extends TestCase
     {
         $this->products[11]->setShippingService(null);
 
-        $body = (string) $this->controller->show($this->request(), ['id' => '11'])->getBody();
+        $body = $this->body($this->controller->show($this->request(), ['id' => '11']));
 
         $this->assertMatchesRegularExpression('#<dt[^>]*>Category</dt>\s*<dd[^>]*>—</dd>#', $body);
         $this->assertMatchesRegularExpression('#<dt[^>]*>Shipping service</dt>\s*<dd[^>]*>—</dd>#', $body);
@@ -221,7 +354,7 @@ final class ProductControllerTest extends TestCase
     {
         $this->products[10]->setStatus($status);
 
-        $body = (string) $this->controller->show($this->request(), ['id' => '10'])->getBody();
+        $body = $this->body($this->controller->show($this->request(), ['id' => '10']));
 
         $this->assertStringContainsString($badge, $body);
     }
@@ -231,9 +364,9 @@ final class ProductControllerTest extends TestCase
      */
     public function testShowEscapesTitle(): void
     {
-        $this->addProduct($this->product(12, 'XSS-1', '<b>Bold</b>', null));
+        $this->addProduct($this->product(13, 'XSS-1', '<b>Bold</b>', null));
 
-        $body = (string) $this->controller->show($this->request(), ['id' => '12'])->getBody();
+        $body = $this->body($this->controller->show($this->request(), ['id' => '13']));
 
         $this->assertStringNotContainsString('<b>Bold</b>', $body);
         $this->assertStringContainsString('&lt;b&gt;Bold&lt;/b&gt;', $body);
@@ -263,26 +396,37 @@ final class ProductControllerTest extends TestCase
         $response = $this->controller->show($this->request(), $args);
 
         $this->assertSame(404, $response->getStatusCode());
-        $this->assertStringContainsString('Product not found.', (string) $response->getBody());
+        $this->assertStringContainsString('Product not found.', $this->body($response));
     }
 
     // ---------- helpers ----------
 
     /**
-     * Build the controller around the given product repository, with an entity
-     * manager that fails the test if anything is persisted, flushed or removed.
-     *
-     * @param EntityRepository<Product> $repository
+     * Build the controller with fake repositories and stock query; the entity
+     * manager fails the test if anything is persisted, flushed or removed.
      */
-    private function controllerWith(EntityRepository $repository): ProductController
+    private function controller(): ProductController
     {
-        $em = $this->createMock(EntityManagerInterface::class);
-        $em->method('getRepository')->willReturnCallback(
-            function (string $class) use ($repository): EntityRepository {
-                $this->assertSame(Product::class, $class);
+        $products = $this->createStub(EntityRepository::class);
+        $products->method('find')->willReturnCallback(fn (mixed $id): ?Product => $this->products[(int) $id] ?? null);
+        $products->method('findBy')->willReturnCallback(function (array $criteria, ?array $orderBy = null): array {
+            $this->findByArgs = [$criteria, $orderBy];
+            $sorted = array_values($this->products);
+            usort($sorted, static fn (Product $a, Product $b): int => strcmp($a->getTitle(), $b->getTitle()));
 
-                return $repository;
-            }
+            return $sorted;
+        });
+
+        $categories = $this->createStub(EntityRepository::class);
+        $categories->method('findAll')->willReturnCallback(fn (): array => array_values($this->categories));
+
+        $connection = $this->createStub(Connection::class);
+        $connection->method('fetchAllAssociative')->willReturnCallback(fn (): array => $this->stockRows);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('getConnection')->willReturn($connection);
+        $em->method('getRepository')->willReturnCallback(
+            static fn (string $class): EntityRepository => $class === Category::class ? $categories : $products
         );
         $em->expects($this->never())->method('persist');
         $em->expects($this->never())->method('flush');
@@ -290,7 +434,17 @@ final class ProductControllerTest extends TestCase
 
         $factory = new Psr17Factory();
 
-        return new ProductController(new PlatesRender(), $factory, $factory, $em);
+        return new ProductController(new PlatesRender(), $factory, $factory, $em, new CategoryPaths($em));
+    }
+
+    /**
+     * Call index() with the given query.
+     *
+     * @param array<string, string> $query
+     */
+    private function index(array $query = []): ResponseInterface
+    {
+        return $this->controller->index($this->request()->withQueryParams($query));
     }
 
     /**
@@ -298,7 +452,7 @@ final class ProductControllerTest extends TestCase
      */
     private function request(): ServerRequest
     {
-        return new ServerRequest('GET', '/product');
+        return new ServerRequest('GET', '/products');
     }
 
     /**
@@ -316,7 +470,7 @@ final class ProductControllerTest extends TestCase
             ->setFees('0.68')
             ->setPackageCost('0.12')
             ->setPostageCost('1.55')
-            ->setShippingService('Royal Mail 2nd Class')
+            ->setShippingService('CRL48')
             ->setCreated(new DateTime('2026-01-15 09:30:00'));
 
         $this->setId($product, $id);
@@ -333,10 +487,41 @@ final class ProductControllerTest extends TestCase
     }
 
     /**
+     * Add a category to the fake repository.
+     */
+    private function addCategory(int $id, string $title, int $parentId): void
+    {
+        $category = (new Category())->setTitle($title)->setParentId($parentId);
+        $this->setId($category, $id);
+        $this->categories[$id] = $category;
+    }
+
+    /**
      * Set an entity's private ID, as Doctrine would after loading it.
      */
     private function setId(object $entity, int $id): void
     {
         (new ReflectionProperty($entity, 'id'))->setValue($entity, $id);
+    }
+
+    /**
+     * The table row for a product, found by its link.
+     */
+    private function rowFor(string $body, int $id): string
+    {
+        $link = strpos($body, 'href="/product/' . $id . '"');
+        $this->assertNotFalse($link, "Row for product $id not found.");
+        $start = strrpos(substr($body, 0, $link), '<tr>');
+        $end = strpos($body, '</tr>', $link);
+
+        return substr($body, (int) $start, (int) $end - (int) $start);
+    }
+
+    /**
+     * Response body as a string.
+     */
+    private function body(ResponseInterface $response): string
+    {
+        return (string) $response->getBody();
     }
 }

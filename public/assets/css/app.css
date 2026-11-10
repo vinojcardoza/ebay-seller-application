@@ -664,6 +664,27 @@ body {
     font-size: 0.8125rem;
 }
 
+/* ---------- Products list ---------- */
+
+.product-table {
+    font-size: 0.8125rem;
+}
+
+.product-table > :not(caption) > * > * {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+}
+
+.product-table th,
+.product-table td {
+    white-space: nowrap;
+}
+
+.product-table .product-cell {
+    min-width: 220px;
+    white-space: normal;
+}
+
 /* ---------- Feedback list ---------- */
 
 .feedback-comment {

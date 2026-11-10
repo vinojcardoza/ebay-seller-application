@@ -21,6 +21,7 @@ $navItems = [
     ['label' => 'Products', 'url' => '/products', 'icon' => 'ti-package', 'match' => '/product'],
     ['label' => 'Categories', 'url' => '/categories', 'icon' => 'ti-category'],
     ['label' => 'Custom SKUs', 'url' => '/custom-skus', 'icon' => 'ti-packages'],
+    ['label' => 'Purchases', 'url' => '/purchases', 'icon' => 'ti-receipt'],
     ['label' => 'Feedback', 'url' => '/feedbacks', 'icon' => 'ti-message-star'],
     ['label' => 'eBay', 'url' => '/ebay', 'icon' => 'ti-shopping-bag'],
 ];

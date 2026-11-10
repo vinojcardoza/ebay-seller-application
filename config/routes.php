@@ -6,6 +6,7 @@ use App\Controllers\EbayController;
 use App\Controllers\FeedbackController;
 use App\Controllers\IndexController;
 use App\Controllers\ProductController;
+use App\Controllers\PurchasesController;
 use League\Route\Router;
 
 return function (Router $router) {
@@ -38,6 +39,14 @@ return function (Router $router) {
         '/custom-skus/{id:number}/products/{lineId:number}/delete',
         [CustomSkusController::class, 'removeLine']
     );
+
+    $router->get('/purchases', [PurchasesController::class, 'index']);
+    $router->get('/purchases/create', [PurchasesController::class, 'create']);
+    $router->post('/purchases', [PurchasesController::class, 'store']);
+    $router->get('/purchases/{id:number}/edit', [PurchasesController::class, 'edit']);
+    $router->post('/purchases/{id:number}', [PurchasesController::class, 'update']);
+    $router->post('/purchases/{id:number}/receive', [PurchasesController::class, 'receive']);
+    $router->post('/purchases/{id:number}/delete', [PurchasesController::class, 'delete']);
 
     $router->get('/feedbacks', [FeedbackController::class, 'index']);
     $router->post('/feedbacks/import', [FeedbackController::class, 'import']);
