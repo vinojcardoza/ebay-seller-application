@@ -1,33 +1,37 @@
 <?php
 
 /**
- * View: Dashboard with KPI cards, this month's sales summary, order type breakdown and recent orders.
+ * View: Dashboard with KPI cards, this month's sales summary, low stock products and order type breakdown.
  *
  * @var \League\Plates\Template\Template $this
- * @var array{orders: int, revenue: float, items: int, products: int} $stats
+ * @var array{orders: int, revenue: float, profit: float, items: int, products: int} $stats All-time figures;
+ *     profit = net sales − item costs − postage − packaging.
  * @var array{label: string, from: string, to: string, current: array<string, float|int>,
  *     previous: array<string, float|int>} $month
  * @var list<array{order_type: string, total: int|string}> $orderTypes
- * @var list<array{id: int|string, order_reference: string, order_date: string, platform: string,
- *     order_type: string, full_name: string|null, total: string|null}> $recentOrders
+ * @var array{total: int, out: int, products: list<array{id: int, sku: string, title: string, stock: int,
+ *     threshold: int|null, pending: int, state: string}>} $lowStock Active products low or out of stock,
+ *     lowest first (see StockLevels::lowStock()).
  */
 
 $this->layout('layout', ['title' => 'Dashboard']);
 
+/**
+ * Format an amount in pounds, with the minus sign before the symbol.
+ */
+$money = static fn (float $amount): string => ($amount < 0 ? '−£' : '£') . number_format(abs($amount), 2);
+
 $kpis = [
     ['label' => 'Total orders', 'value' => number_format($stats['orders']), 'icon' => 'ti-shopping-cart', 'tint' => 'primary'],
-    ['label' => 'Sales', 'value' => '£' . number_format($stats['revenue'], 2), 'icon' => 'ti-currency-pound', 'tint' => 'success'],
+    ['label' => 'Sales', 'value' => $money($stats['revenue']), 'icon' => 'ti-currency-pound', 'tint' => 'success'],
+    ['label' => 'Total profit', 'value' => $money($stats['profit']), 'icon' => 'ti-trending-up',
+        'tint' => $stats['profit'] < 0 ? 'danger' : 'info'],
     ['label' => 'Items sold', 'value' => number_format($stats['items']), 'icon' => 'ti-box', 'tint' => 'warning'],
     ['label' => 'Active products', 'value' => number_format($stats['products']), 'icon' => 'ti-package', 'tint' => 'info'],
 ];
 
 $current = $month['current'];
 $previous = $month['previous'];
-
-/**
- * Format an amount in pounds, with the minus sign before the symbol.
- */
-$money = static fn (float $amount): string => ($amount < 0 ? '−£' : '£') . number_format(abs($amount), 2);
 
 /**
  * Average net sale per order for a period's totals.
@@ -64,7 +68,7 @@ $typeTint = static fn (string $type): string => match ($type) {
 ?>
 <div class="row">
     <?php foreach ($kpis as $kpi) : ?>
-        <div class="col-sm-6 col-xl-3">
+        <div class="col-sm-6 col-lg-4 col-xxl">
             <div class="card kpi-card">
                 <div class="card-body">
                     <span class="kpi-icon tint-<?php echo $kpi['tint']; ?>"><i class="ti <?php echo $kpi['icon']; ?>" aria-hidden="true"></i></span>
@@ -124,39 +128,83 @@ $typeTint = static fn (string $type): string => match ($type) {
 <div class="row">
     <div class="col-xl-8">
         <div class="card">
-            <div class="card-header">
-                <h2>Recent orders</h2>
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h2>
+                    Low stock
+                    <?php if ($lowStock['total'] > 0) : ?>
+                        <span class="text-body-secondary fw-normal">
+                            · <?php echo number_format($lowStock['total']); ?> product<?php echo $lowStock['total'] === 1 ? '' : 's'; ?>
+                        </span>
+                    <?php endif; ?>
+                </h2>
+                <?php if ($lowStock['total'] > 0) : ?>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php if ($lowStock['out'] > 0) : ?>
+                            <a class="btn btn-light-danger btn-sm" href="/products?stock=out&amp;status=active">
+                                <?php echo number_format($lowStock['out']); ?> out of stock
+                            </a>
+                        <?php endif; ?>
+                        <a class="btn btn-light-primary btn-sm" href="/products?stock=low&amp;status=active">
+                            <i class="ti ti-list" aria-hidden="true"></i> View low stock
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Reference</th>
-                            <th>Customer</th>
-                            <th>Platform</th>
-                            <th>Type</th>
-                            <th>Date</th>
-                            <th class="text-end">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($recentOrders as $order) : ?>
+            <?php if ($lowStock['products'] === []) : ?>
+                <div class="empty-state">
+                    <i class="ti ti-circle-check" aria-hidden="true"></i>
+                    Every active product is above its low stock level.
+                </div>
+            <?php else : ?>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
                             <tr>
-                                <td class="text-nowrap"><?php echo $this->e($order['order_reference']); ?></td>
-                                <td class="text-nowrap"><?php echo $this->e($order['full_name'] ?? '—'); ?></td>
-                                <td><?php echo $this->e($order['platform']); ?></td>
-                                <td>
-                                    <span class="badge tint-<?php echo $typeTint($order['order_type']); ?>">
-                                        <?php echo $this->e($order['order_type']); ?>
-                                    </span>
-                                </td>
-                                <td class="text-nowrap"><?php echo $this->e(date('d M Y', (int) strtotime($order['order_date']))); ?></td>
-                                <td class="text-end">£<?php echo number_format((float) ($order['total'] ?? 0), 2); ?></td>
+                                <th>Product</th>
+                                <th class="text-end">In stock</th>
+                                <th class="text-end">Low at</th>
+                                <th class="text-end">On order</th>
+                                <th>Status</th>
                             </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($lowStock['products'] as $product) : ?>
+                                <tr>
+                                    <td>
+                                        <a href="/product/<?php echo $product['id']; ?>"><?php echo $this->e($product['title']); ?></a>
+                                        <div class="small text-body-secondary"><?php echo $this->e($product['sku']); ?></div>
+                                    </td>
+                                    <td class="text-end fw-semibold<?php echo $product['stock'] <= 0 ? ' text-danger' : ''; ?>">
+                                        <?php echo number_format($product['stock']); ?>
+                                    </td>
+                                    <td class="text-end"><?php echo $product['threshold'] !== null ? number_format($product['threshold']) : '—'; ?></td>
+                                    <td class="text-end">
+                                        <?php if ($product['pending'] > 0) : ?>
+                                            <a href="/purchases?<?php echo $this->e(http_build_query(['status' => 0, 'q' => $product['sku']])); ?>">
+                                                <?php echo number_format($product['pending']); ?>
+                                            </a>
+                                        <?php else : ?>
+                                            <span class="text-body-secondary">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($product['state'] === 'out') : ?>
+                                            <span class="badge tint-danger">Out of stock</span>
+                                        <?php else : ?>
+                                            <span class="badge tint-warning">Low stock</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php if ($lowStock['total'] > count($lowStock['products'])) : ?>
+                    <div class="card-body border-top small text-body-secondary">
+                        Showing the <?php echo count($lowStock['products']); ?> lowest of <?php echo number_format($lowStock['total']); ?>.
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
         </div>
     </div>
 

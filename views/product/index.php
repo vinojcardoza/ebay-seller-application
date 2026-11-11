@@ -1,7 +1,7 @@
 <?php
 
 /**
- * View: Products list with pricing, shipping, multi-buy and stock, plus search and filters.
+ * View: Products list with pricing, shipping and stock, plus search and filters.
  *
  * @var \League\Plates\Template\Template $this
  * @var list<\App\Entities\Product> $products Current page.
@@ -11,7 +11,7 @@
  * @var int $page Current page.
  * @var int $pages Number of pages.
  * @var array{q: string, category: int|null, stock: string, shipping: string, status: string} $filters
- * @var array<int, string> $categories Category path labels keyed by ID.
+ * @var array<int, string> $categories Category path labels keyed by ID, for the category filter.
  * @var list<string> $shippingServices Shipping services in use.
  * @var array<string, int> $stockCounts Products per stock filter.
  * @var array<string, string> $stockFilters Stock filter labels.
@@ -120,14 +120,12 @@ $money = static fn (?string $amount): string => $amount !== null && $amount !== 
                     <tr>
                         <th class="text-end">ID</th>
                         <th>Product</th>
-                        <th>Category</th>
                         <th class="text-end">Selling price</th>
                         <th class="text-end">Fees</th>
                         <th class="text-end">Promotion</th>
                         <th>Shipping service</th>
                         <th class="text-end">Postage</th>
                         <th class="text-end">Package</th>
-                        <th class="text-end" title="Multi-buy values for 2, 3 and 4+ items">Multi-buy 2 / 3 / 4</th>
                         <th class="text-end">Stock</th>
                         <th>Status</th>
                     </tr>
@@ -136,7 +134,6 @@ $money = static fn (?string $amount): string => $amount !== null && $amount !== 
                     <?php foreach ($products as $product) : ?>
                         <?php
                         $level = $stock[$product->getId()] ?? ['stock' => 0, 'pending' => 0, 'state' => 'out'];
-                        $categoryId = $product->getCategory()?->getId();
                         ?>
                         <tr>
                             <td class="text-end text-body-secondary"><?php echo $product->getId(); ?></td>
@@ -144,20 +141,12 @@ $money = static fn (?string $amount): string => $amount !== null && $amount !== 
                                 <a href="/product/<?php echo $product->getId(); ?>"><?php echo $this->e($product->getTitle()); ?></a>
                                 <div class="small text-body-secondary"><?php echo $this->e($product->getSku()); ?></div>
                             </td>
-                            <td><?php echo $categoryId !== null ? $this->e($categories[$categoryId] ?? '—') : '—'; ?></td>
                             <td class="text-end"><?php echo $this->e($money($product->getPrice())); ?></td>
                             <td class="text-end"><?php echo $this->e($money($product->getFees())); ?></td>
                             <td class="text-end"><?php echo $this->e($product->getPromoPercentage()); ?>%</td>
                             <td><?php echo $this->e($product->getShippingService() ?? '—'); ?></td>
                             <td class="text-end"><?php echo $this->e($money($product->getPostageCost())); ?></td>
                             <td class="text-end"><?php echo $this->e($money($product->getPackageCost())); ?></td>
-                            <td class="text-end">
-                                <?php echo $this->e(implode(' / ', [
-                                    $product->getMultiBuy2() ?? '—',
-                                    $product->getMultiBuy3() ?? '—',
-                                    $product->getMultiBuy4() ?? '—',
-                                ])); ?>
-                            </td>
                             <td class="text-end">
                                 <strong><?php echo number_format($level['stock']); ?></strong>
                                 <?php if ($level['state'] === 'out') : ?>

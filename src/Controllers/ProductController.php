@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Catalog\CategoryPaths;
+use App\Catalog\StockLevels;
 use App\Entities\Product;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\RendererInterface;
@@ -15,7 +16,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 
 /**
- * Product list (with pricing, shipping, multi-buy and stock, searchable and
+ * Product list (with pricing, shipping and stock, searchable and
  * filterable) and product detail pages.
  */
 class ProductController extends ControllerAbstract
@@ -52,12 +53,13 @@ class ProductController extends ControllerAbstract
         ResponseFactoryInterface $factory,
         EntityManagerInterface $em,
         private readonly CategoryPaths $categoryPaths,
+        private readonly StockLevels $stockLevels,
     ) {
         parent::__construct($renderer, $stream, $factory, $em);
     }
 
     /**
-     * List products with their pricing, shipping, multi-buy settings and stock,
+     * List products with their pricing, shipping and stock,
      * filtered by search text, category (including subcategories), stock state,
      * shipping service and status.
      */
@@ -66,7 +68,7 @@ class ProductController extends ControllerAbstract
         $query = $request->getQueryParams();
         $categories = $this->categoryPaths->labels();
         $products = $this->em->getRepository(Product::class)->findBy([], ['title' => 'ASC']);
-        $stock = $this->stockLevels();
+        $stock = $this->stockLevels->all();
 
         $filters = [
             'q' => is_string($query['q'] ?? null) ? mb_substr(trim($query['q']), 0, 100) : '',
@@ -138,40 +140,6 @@ class ProductController extends ControllerAbstract
         ]);
     }
 
-    /**
-     * Stock per product: delivered purchases minus units sold (the legacy
-     * calculation), plus units ordered but not yet delivered.
-     *
-     * @return array<int, array{stock: int, pending: int, state: string}> Keyed by product ID, for every product.
-     */
-    private function stockLevels(): array
-    {
-        $rows = $this->em->getConnection()->fetchAllAssociative(
-            'SELECT p.id, p.low_stock,'
-            . ' COALESCE(delivered.qty, 0) AS delivered, COALESCE(pending.qty, 0) AS pending,'
-            . ' COALESCE(sold.qty, 0) AS sold'
-            . ' FROM products p'
-            . ' LEFT JOIN (SELECT product, SUM(quantity) AS qty FROM purchases WHERE status = 1 GROUP BY product)'
-            . ' delivered ON delivered.product = p.id'
-            . ' LEFT JOIN (SELECT product, SUM(quantity) AS qty FROM purchases WHERE status = 0 GROUP BY product)'
-            . ' pending ON pending.product = p.id'
-            . ' LEFT JOIN (SELECT product, SUM(quantity) AS qty FROM order_items GROUP BY product)'
-            . ' sold ON sold.product = p.id'
-        );
-
-        $levels = [];
-
-        foreach ($rows as $row) {
-            $stock = (int) $row['delivered'] - (int) $row['sold'];
-            $levels[(int) $row['id']] = [
-                'stock' => $stock,
-                'pending' => (int) $row['pending'],
-                'state' => $stock <= 0 ? 'out' : ($stock <= (int) ($row['low_stock'] ?? 0) ? 'low' : 'in'),
-            ];
-        }
-
-        return $levels;
-    }
 
     /**
      * Whether a product passes every active filter.

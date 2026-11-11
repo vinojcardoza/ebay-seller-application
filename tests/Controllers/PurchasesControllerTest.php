@@ -472,7 +472,190 @@ final class PurchasesControllerTest extends TestCase
         $this->assertNoWrites();
     }
 
-    // ---------- delete ----------
+    // ---------- receive selected ----------
+
+    /**
+     * The list has a bulk delivery form dated today, keeping the filters, with checkboxes only on pending rows.
+     */
+    public function testIndexShowsBulkDeliveryForm(): void
+    {
+        $body = $this->body($this->controller->index($this->get(['q' => '', 'page' => '1'])));
+
+        $this->assertStringContainsString('action="/purchases/receive?page=1"', $body, 'Empty filters are dropped.');
+        $this->assertMatchesRegularExpression(
+            '#name="received_date" max="2026-11-10" required\s+value="2026-11-10"#',
+            $body
+        );
+        $this->assertStringContainsString('data-check-all="receive"', $body);
+        $this->assertStringContainsString('Mark selected delivered', $body);
+
+        $this->assertStringContainsString('name="ids[]"', $this->rowFor($body, 'Heatsink TO-220'));
+        $this->assertStringContainsString('value="7"', $this->rowFor($body, 'Heatsink TO-220'));
+        $this->assertStringNotContainsString('name="ids[]"', $this->rowFor($body, 'Racket Grip'));
+    }
+
+    /**
+     * Without pending purchases on the page there is no bulk delivery form.
+     */
+    public function testIndexHidesBulkFormWithoutPendingPurchases(): void
+    {
+        $this->find(Purchase::class, 7)->setStatus(Purchase::STATUS_DELIVERED);
+
+        $body = $this->body($this->controller->index($this->get()));
+
+        $this->assertStringNotContainsString('bulk-receive', $body);
+        $this->assertStringNotContainsString('data-check-all', $body);
+    }
+
+    /**
+     * Selected pending purchases are marked delivered at midday on the chosen date in one flush,
+     * delivered ones are skipped, and the redirect keeps the filters and reports the count.
+     */
+    public function testReceiveSelectedMarksPurchasesDelivered(): void
+    {
+        $this->add($this->purchase(2, 300, '2026-11-02 08:00:00', 3, '6.00', Purchase::STATUS_PENDING, null), 9);
+
+        $response = $this->controller->receiveSelected(
+            $this->post(['ids' => ['7', '9', '8', '7'], 'received_date' => '2026-11-06'])
+                ->withQueryParams(['status' => '0', 'q' => 'heat', 'done' => 'x', 'page' => '2'])
+        );
+
+        $this->assertRedirect('/purchases?status=0&q=heat&page=2&done=received-selected&count=2', $response);
+        $this->assertSame(1, $this->flushes);
+
+        foreach ([7, 9] as $id) {
+            $purchase = $this->find(Purchase::class, $id);
+            $this->assertSame(Purchase::STATUS_DELIVERED, $purchase->getStatus());
+            $this->assertSame('2026-11-06 12:00:00', $purchase->getReceivedDate()?->format('Y-m-d H:i:s'));
+            $this->assertNotNull($purchase->getUpdated());
+        }
+
+        $this->assertSame('2026-11-03', $this->find(Purchase::class, 8)->getReceivedDate()?->format('Y-m-d'));
+    }
+
+    /**
+     * Today is an allowed delivery date.
+     */
+    public function testReceiveSelectedAcceptsToday(): void
+    {
+        $response = $this->controller->receiveSelected($this->post(['ids' => ['7'], 'received_date' => '2026-11-10']));
+
+        $this->assertRedirect('/purchases?done=received-selected&count=1', $response);
+        $this->assertSame('2026-11-10', $this->find(Purchase::class, 7)->getReceivedDate()?->format('Y-m-d'));
+    }
+
+    /**
+     * Selecting only delivered purchases changes nothing.
+     */
+    public function testReceiveSelectedSkipsDeliveredPurchases(): void
+    {
+        $response = $this->controller->receiveSelected($this->post(['ids' => ['8'], 'received_date' => '2026-11-06']));
+
+        $this->assertRedirect('/purchases?done=received-selected&count=0', $response);
+        $this->assertNoWrites();
+        $this->assertSame('2026-11-03', $this->find(Purchase::class, 8)->getReceivedDate()?->format('Y-m-d'));
+    }
+
+    /**
+     * Invalid bulk delivery submissions and the error each shows.
+     *
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function invalidReceiveSelectedProvider(): array
+    {
+        return [
+            'nothing selected' => [['received_date' => '2026-11-06'], 'Select at least one pending purchase.'],
+            'malformed IDs only' => [
+                ['ids' => ['7a', ''], 'received_date' => '2026-11-06'],
+                'Select at least one pending purchase.',
+            ],
+            'too many' => [
+                ['ids' => array_fill(0, 201, '7'), 'received_date' => '2026-11-06'],
+                'Select at most 200 purchases at a time.',
+            ],
+            'missing date' => [['ids' => ['7'], 'received_date' => ''], 'Enter the delivery date.'],
+            'invalid date' => [['ids' => ['7'], 'received_date' => '2026-02-30'], 'Enter the delivery date.'],
+            'future date' => [
+                ['ids' => ['7'], 'received_date' => '2026-11-11'],
+                'The delivery date cannot be in the future.',
+            ],
+            'before purchase' => [
+                ['ids' => ['7'], 'received_date' => '2026-10-31'],
+                'The delivery date cannot be before the purchase date (01 Nov 2026 – Heatsink TO-220).',
+            ],
+        ];
+    }
+
+    /**
+     * Invalid bulk delivery submissions re-render the list with a 422, the error and no writes.
+     *
+     * @param array<string, mixed> $fields
+     */
+    #[DataProvider('invalidReceiveSelectedProvider')]
+    public function testReceiveSelectedRejectsInvalidInput(array $fields, string $message): void
+    {
+        $response = $this->controller->receiveSelected($this->post($fields));
+
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertStringContainsString($this->escape($message), $this->body($response));
+        $this->assertNoWrites();
+        $this->assertSame(Purchase::STATUS_PENDING, $this->find(Purchase::class, 7)->getStatus());
+    }
+
+    /**
+     * After a validation error the form keeps the selection, the date and the filters.
+     */
+    public function testReceiveSelectedErrorKeepsInput(): void
+    {
+        $body = $this->body($this->controller->receiveSelected(
+            $this->post(['ids' => ['7'], 'received_date' => '2026-11-11'])->withQueryParams(['supplier' => '1'])
+        ));
+
+        $this->assertMatchesRegularExpression('#value="7" data-check-group="receive"[^>]*\s+checked>#', $body);
+        $this->assertStringContainsString('value="2026-11-11"', $body);
+        $this->assertStringContainsString('is-invalid', $body);
+        $this->assertStringContainsString('action="/purchases/receive?supplier=1"', $body);
+    }
+
+    /**
+     * An unknown selected purchase is a 404 with no writes.
+     */
+    public function testReceiveSelectedUnknownPurchase(): void
+    {
+        $this->assertNotFound(
+            $this->controller->receiveSelected($this->post(['ids' => ['7', '99'], 'received_date' => '2026-11-06']))
+        );
+        $this->assertNoWrites();
+        $this->assertSame(Purchase::STATUS_PENDING, $this->find(Purchase::class, 7)->getStatus());
+    }
+
+    /**
+     * The bulk delivery notice reports how many purchases were marked delivered.
+     *
+     * @return array<string, array{string, string}>
+     */
+    public static function receiveSelectedNoticeProvider(): array
+    {
+        return [
+            'several' => ['3', '3 purchases marked as delivered.'],
+            'one' => ['1', '1 purchase marked as delivered.'],
+            'none' => ['0', 'The selected purchases were already delivered.'],
+            'malformed count' => ['x', 'The selected purchases were already delivered.'],
+        ];
+    }
+
+    /**
+     * The `received-selected` notice shows the count from the redirect.
+     */
+    #[DataProvider('receiveSelectedNoticeProvider')]
+    public function testReceiveSelectedNotice(string $count, string $message): void
+    {
+        $body = $this->body($this->controller->index($this->get(['done' => 'received-selected', 'count' => $count])));
+
+        $this->assertStringContainsString($message, $body);
+    }
+
+        // ---------- delete ----------
 
     /**
      * Deleting removes the purchase.
@@ -689,11 +872,19 @@ final class PurchasesControllerTest extends TestCase
     /**
      * Build a POST request with form fields.
      *
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields
      */
     private function post(array $fields): ServerRequest
     {
         return (new ServerRequest('POST', '/purchases'))->withParsedBody($fields);
+    }
+
+    /**
+     * HTML-escape text as the views do.
+     */
+    private function escape(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     /**

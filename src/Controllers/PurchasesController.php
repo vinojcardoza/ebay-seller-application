@@ -23,7 +23,7 @@ use Psr\Http\Message\StreamFactoryInterface;
 
 /**
  * Stock purchases from suppliers: list with filters and totals, create, edit,
- * mark as delivered and delete.
+ * mark as delivered (one, or several at once with a delivery date) and delete.
  *
  * Delivered purchases (and their received dates) drive the FIFO item cost of
  * imported eBay orders, so changes here affect future cost calculations.
@@ -47,6 +47,16 @@ class PurchasesController extends ControllerAbstract
         Purchase::STATUS_PENDING => 'Pending',
         Purchase::STATUS_DELIVERED => 'Delivered',
     ];
+
+    /**
+     * Most purchases that can be marked delivered in one request.
+     */
+    public const MAX_SELECTED = 200;
+
+    /**
+     * List filters kept in the URL across the bulk delivery form and its redirect.
+     */
+    private const LIST_PARAMS = ['status', 'supplier', 'q', 'page'];
 
     /**
      * Success messages for `?done=` codes set by redirects.
@@ -78,7 +88,100 @@ class PurchasesController extends ControllerAbstract
      */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
-        $query = $request->getQueryParams();
+        return $this->renderIndex($request->getQueryParams());
+    }
+
+    /**
+     * Mark the selected pending purchases as delivered on the given date, then
+     * return to the list with its filters. Purchases already delivered are left
+     * alone; 404 for an unknown purchase, 422 when nothing is selected or the
+     * date is invalid, in the future, or before a selected purchase was bought.
+     */
+    public function receiveSelected(ServerRequestInterface $request): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        $rawIds = is_array($body) && is_array($body['ids'] ?? null) ? $body['ids'] : [];
+        $ids = array_values(array_unique(array_map(
+            'intval',
+            array_filter($rawIds, static fn (mixed $id): bool => is_string($id) && ctype_digit($id))
+        )));
+        $dateValue = $this->field($request, 'received_date');
+        $bulk = ['ids' => $ids, 'date' => $dateValue, 'errors' => []];
+
+        if ($ids === [] || count($rawIds) > self::MAX_SELECTED) {
+            $bulk['errors']['ids'] = $ids === []
+                ? 'Select at least one pending purchase.'
+                : sprintf('Select at most %d purchases at a time.', self::MAX_SELECTED);
+        }
+
+        $purchases = [];
+
+        foreach (array_slice($ids, 0, self::MAX_SELECTED) as $id) {
+            $purchase = $this->purchases()->find($id);
+
+            if ($purchase === null) {
+                return $this->notFound('Purchase not found.');
+            }
+
+            if ($purchase->getStatus() !== Purchase::STATUS_DELIVERED) {
+                $purchases[] = $purchase;
+            }
+        }
+
+        $date = $this->date($dateValue);
+
+        if ($date === null) {
+            $bulk['errors']['date'] = 'Enter the delivery date.';
+        } elseif ($dateValue > $this->clock->now()->format('Y-m-d')) {
+            $bulk['errors']['date'] = 'The delivery date cannot be in the future.';
+        } else {
+            $early = array_filter(
+                $purchases,
+                static fn (Purchase $p): bool => $p->getPurchasedDate()->format('Y-m-d') > $dateValue
+            );
+
+            if ($early !== []) {
+                $bulk['errors']['date'] = sprintf(
+                    'The delivery date cannot be before the purchase date (%s).',
+                    implode(', ', array_map(
+                        static fn (Purchase $p): string => $p->getPurchasedDate()->format('d M Y')
+                            . ' – ' . ($p->getProduct()?->getTitle() ?? 'purchase ' . $p->getId()),
+                        $early
+                    ))
+                );
+            }
+        }
+
+        if ($bulk['errors'] !== []) {
+            return $this->renderIndex($request->getQueryParams(), $bulk);
+        }
+
+        foreach ($purchases as $purchase) {
+            $purchase
+                ->setStatus(Purchase::STATUS_DELIVERED)
+                ->setReceivedDate(clone $date)
+                ->setUpdated(new DateTime());
+        }
+
+        if ($purchases !== []) {
+            $this->em->flush();
+        }
+
+        $done = ['done' => 'received-selected', 'count' => count($purchases)];
+
+        return $this->redirect('/purchases?' . http_build_query($this->listParams($request->getQueryParams()) + $done));
+    }
+
+    /**
+     * Render the list for the given query; with bulk delivery errors it is a 422
+     * that keeps the selection and date.
+     *
+     * @param array<string, mixed> $query
+     * @param array{ids: list<int>, date: string, errors: array<string, string>}|null $bulk
+     */
+    private function renderIndex(array $query, ?array $bulk = null): ResponseInterface
+    {
+        $bulk ??= ['ids' => [], 'date' => $this->clock->now()->format('Y-m-d'), 'errors' => []];
         $filters = [
             'status' => is_string($query['status'] ?? null) && ctype_digit($query['status'])
                 && isset(self::STATUSES[(int) $query['status']]) ? (int) $query['status'] : null,
@@ -116,8 +219,51 @@ class PurchasesController extends ControllerAbstract
             'filters' => $filters,
             'suppliers' => $this->supplierOptions(),
             'statuses' => self::STATUSES,
-            'notice' => is_string($query['done'] ?? null) ? self::NOTICES[$query['done']] ?? null : null,
-        ]);
+            'notice' => $this->notice($query),
+            'bulk' => $bulk,
+            'listQuery' => http_build_query($this->listParams($query)),
+            'today' => $this->clock->now()->format('Y-m-d'),
+        ], $bulk['errors'] === [] ? 200 : 422);
+    }
+
+    /**
+     * Success message for a `?done=` code; `received-selected` reports `?count=`.
+     *
+     * @param array<string, mixed> $query
+     */
+    private function notice(array $query): ?string
+    {
+        $done = $query['done'] ?? null;
+
+        if ($done === 'received-selected') {
+            $count = is_string($query['count'] ?? null) && ctype_digit($query['count']) ? (int) $query['count'] : 0;
+
+            return $count === 0
+                ? 'The selected purchases were already delivered.'
+                : sprintf('%d purchase%s marked as delivered.', $count, $count === 1 ? '' : 's');
+        }
+
+        return is_string($done) ? self::NOTICES[$done] ?? null : null;
+    }
+
+    /**
+     * The list's filter and page parameters from a query, dropping empty and non-string values.
+     *
+     * @param array<string, mixed> $query
+     *
+     * @return array<string, string>
+     */
+    private function listParams(array $query): array
+    {
+        $params = [];
+
+        foreach (self::LIST_PARAMS as $key) {
+            if (is_string($query[$key] ?? null) && $query[$key] !== '') {
+                $params[$key] = mb_substr($query[$key], 0, 100);
+            }
+        }
+
+        return $params;
     }
 
     /**
@@ -530,6 +676,17 @@ class PurchasesController extends ControllerAbstract
         $id = $args['id'] ?? '';
 
         return ctype_digit($id) ? $this->purchases()->find((int) $id) : null;
+    }
+
+    /**
+     * A trimmed form field, or '' when missing or not scalar.
+     */
+    private function field(ServerRequestInterface $request, string $name): string
+    {
+        $body = $request->getParsedBody();
+        $value = is_array($body) ? ($body[$name] ?? '') : '';
+
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 
     /**

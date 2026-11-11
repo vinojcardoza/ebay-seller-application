@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Catalog\StockLevels;
 use App\Framework\Clock\ClockInterface;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\RendererInterface;
@@ -14,18 +15,18 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 
 /**
- * Dashboard with headline business figures, the current month's sales
- * summary and the latest orders.
+ * Dashboard with headline business figures (including all-time profit), the
+ * current month's sales summary and the products that are low or out of stock.
  *
- * Month figures follow the orders page: net = sold price − fees, and
+ * Figures follow the orders page: net = sold price − fees, and
  * profit = net − item cost × quantity − postage − packaging.
  */
 class IndexController extends ControllerAbstract
 {
     /**
-     * Number of recent orders shown on the dashboard.
+     * Number of low stock products listed on the dashboard.
      */
-    private const RECENT_ORDER_LIMIT = 10;
+    public const LOW_STOCK_LIMIT = 10;
 
     /**
      * Receive the shared controller services and the clock that decides the current month.
@@ -36,6 +37,7 @@ class IndexController extends ControllerAbstract
         ResponseFactoryInterface $factory,
         EntityManagerInterface $em,
         private readonly ClockInterface $clock,
+        private readonly StockLevels $stockLevels,
     ) {
         parent::__construct($renderer, $stream, $factory, $em);
     }
@@ -48,13 +50,18 @@ class IndexController extends ControllerAbstract
         $db = $this->em->getConnection();
 
         $sales = $db->fetchAssociative(
-            'SELECT COALESCE(SUM(total_sold_price), 0) AS revenue, COALESCE(SUM(quantity), 0) AS items
+            'SELECT COALESCE(SUM(total_sold_price), 0) AS revenue, COALESCE(SUM(quantity), 0) AS items,
+                    COALESCE(SUM(item_cost * quantity), 0) AS cost
              FROM order_items'
-        ) ?: ['revenue' => 0, 'items' => 0];
+        ) ?: ['revenue' => 0, 'items' => 0, 'cost' => 0];
+        $shipping = (float) $db->fetchOne(
+            'SELECT COALESCE(SUM(postage_cost), 0) + COALESCE(SUM(packaging_cost), 0) FROM orders'
+        );
 
         $stats = [
             'orders' => (int) $db->fetchOne('SELECT COUNT(*) FROM orders'),
             'revenue' => (float) $sales['revenue'],
+            'profit' => round((float) $sales['revenue'] - (float) $sales['cost'] - $shipping, 2),
             'items' => (int) $sales['items'],
             'products' => (int) $db->fetchOne('SELECT COUNT(*) FROM products WHERE status = 1'),
         ];
@@ -63,19 +70,11 @@ class IndexController extends ControllerAbstract
             'SELECT order_type, COUNT(*) AS total FROM orders GROUP BY order_type ORDER BY total DESC'
         );
 
-        $recentOrders = $db->fetchAllAssociative(
-            'SELECT o.id, o.order_reference, o.order_date, o.platform, o.order_type, o.full_name,
-                    (SELECT SUM(i.total_sold_price) FROM order_items i WHERE i.order_id = o.id) AS total
-             FROM orders o
-             ORDER BY o.order_date DESC
-             LIMIT ' . self::RECENT_ORDER_LIMIT
-        );
-
         return $this->render('index/index', [
             'stats' => $stats,
             'month' => $this->monthSummary(),
             'orderTypes' => $orderTypes,
-            'recentOrders' => $recentOrders,
+            'lowStock' => $this->stockLevels->lowStock(self::LOW_STOCK_LIMIT),
         ]);
     }
 

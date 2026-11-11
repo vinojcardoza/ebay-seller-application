@@ -1,5 +1,8 @@
 <?php
 
+use App\Auth\Authenticator;
+use App\Auth\NativeSession;
+use App\Auth\SessionInterface;
 use App\Ebay\EbayConfig;
 use App\Ebay\Token\FileTokenStore;
 use App\Ebay\Token\TokenStoreInterface;
@@ -21,7 +24,10 @@ use Psr\Http\Message\StreamFactoryInterface;
 return [
     StreamFactoryInterface::class => DI\create(Psr17Factory::class),
     ResponseFactoryInterface::class => DI\create(Psr17Factory::class),
-    RendererInterface::class => DI\create(PlatesRender::class),
+    RendererInterface::class => fn (Authenticator $auth) => new PlatesRender($auth),
+    SessionInterface::class => fn () => new NativeSession(
+        !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'
+    ),
     RequestFactoryInterface::class => DI\create(Psr17Factory::class),
     ClientInterface::class => fn () => new Client(['timeout' => 30, 'connect_timeout' => 10]),
     ClockInterface::class => DI\create(SystemClock::class),

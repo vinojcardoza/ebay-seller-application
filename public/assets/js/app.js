@@ -48,6 +48,46 @@
     }
 
     /**
+     * Checkbox groups: a [data-check-all="name"] box ticks or clears every
+     * [data-check-group="name"] box, reflects a partial selection, and
+     * [data-check-count="name"] shows how many are selected.
+     */
+    function initCheckGroups() {
+        document.querySelectorAll('[data-check-all]').forEach(function (all) {
+            var name = all.getAttribute('data-check-all');
+            var boxes = document.querySelectorAll('[data-check-group="' + name + '"]');
+            var count = document.querySelector('[data-check-count="' + name + '"]');
+            var hint = count ? count.textContent : '';
+
+            function update() {
+                var checked = Array.prototype.filter.call(boxes, function (box) {
+                    return box.checked;
+                }).length;
+
+                all.checked = checked > 0 && checked === boxes.length;
+                all.indeterminate = checked > 0 && checked < boxes.length;
+
+                if (count) {
+                    count.textContent = checked === 0 ? hint : checked + ' selected';
+                }
+            }
+
+            all.addEventListener('change', function () {
+                boxes.forEach(function (box) {
+                    box.checked = all.checked;
+                });
+                update();
+            });
+
+            boxes.forEach(function (box) {
+                box.addEventListener('change', update);
+            });
+
+            update();
+        });
+    }
+
+    /**
      * Shared tooltip for chart marks with data-tip-value / data-tip-label,
      * shown on hover and keyboard focus. Text is set with textContent only.
      */
@@ -132,6 +172,8 @@
         });
 
         initChartTooltips();
+
+        initCheckGroups();
 
         document.querySelectorAll('form[data-confirm]').forEach(function (form) {
             form.addEventListener('submit', function (event) {

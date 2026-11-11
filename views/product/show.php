@@ -30,11 +30,6 @@ $details = [
     'Shipping service' => $product->getShippingService() ?? '—',
     'Low stock threshold' => (string) ($product->getLowStock() ?? '—'),
     'Promo percentage' => $product->getPromoPercentage() . '%',
-    'Multi-buy tiers' => implode(' / ', [
-        $product->getMultiBuy2() ?? '—',
-        $product->getMultiBuy3() ?? '—',
-        $product->getMultiBuy4() ?? '—',
-    ]),
     'Created' => $product->getCreated()->format('d M Y H:i'),
     'Updated' => $updated !== null ? $updated->format('d M Y H:i') : '—',
 ];

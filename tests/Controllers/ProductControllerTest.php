@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Controllers;
 
 use App\Catalog\CategoryPaths;
+use App\Catalog\StockLevels;
 use App\Controllers\ProductController;
 use App\Entities\Category;
 use App\Entities\Product;
@@ -29,6 +30,7 @@ use ReflectionProperty;
 #[CoversClass(ProductController::class)]
 #[CoversClass(ControllerAbstract::class)]
 #[CoversClass(CategoryPaths::class)]
+#[CoversClass(StockLevels::class)]
 final class ProductControllerTest extends TestCase
 {
     /**
@@ -100,15 +102,15 @@ final class ProductControllerTest extends TestCase
     // ---------- index: columns ----------
 
     /**
-     * Each row shows ID, product, category path, prices, promotion, shipping, multi-buy, stock and status.
+     * Each row shows ID, product, prices, promotion, shipping, stock and status, but no category or multi-buy.
      */
     public function testIndexShowsAllColumns(): void
     {
         $body = $this->body($this->index());
 
         foreach (
-            ['ID', 'Product', 'Category', 'Selling price', 'Fees', 'Promotion', 'Shipping service', 'Postage',
-                'Package', 'Multi-buy 2 / 3 / 4', 'Stock', 'Status'] as $heading
+            ['ID', 'Product', 'Selling price', 'Fees', 'Promotion', 'Shipping service', 'Postage',
+                'Package', 'Stock', 'Status'] as $heading
         ) {
             $this->assertMatchesRegularExpression('#<th[^>]*>' . preg_quote($heading, '#') . '</th>#', $body);
         }
@@ -117,16 +119,25 @@ final class ProductControllerTest extends TestCase
         $this->assertStringContainsString('>10</td>', $row);
         $this->assertStringContainsString('<a href="/product/10">LCD Display 16x2</a>', $row);
         $this->assertStringContainsString('LCD-1602', $row);
-        $this->assertStringContainsString('Electronics', $row);
+        $this->assertStringNotContainsString('<th>Category</th>', $body);
+        $this->assertStringNotContainsString('Electronics', $row);
 
-        foreach (['£4.50', '£0.68', '7.50%', 'CRL48', '£1.55', '£0.12', '2 / 5 / 10'] as $value) {
+        foreach (['£4.50', '£0.68', '7.50%', 'CRL48', '£1.55', '£0.12'] as $value) {
             $this->assertStringContainsString($value, $row);
         }
+
+        $this->assertStringNotContainsString('Multi-buy', $body);
+        $this->assertStringNotContainsString('2 / 5 / 10', $row);
 
         $this->assertStringContainsString('<strong>5</strong>', $row);
         $this->assertStringContainsString('tint-warning">Low', $row);
         $this->assertStringContainsString('tint-success">Active', $row);
-        $this->assertStringContainsString('Sports › Tennis', $this->rowFor($body, 12));
+        $this->assertStringNotContainsString('Sports › Tennis', $this->rowFor($body, 12));
+        $this->assertMatchesRegularExpression(
+            '#<option value="3"[^>]*>\s*Sports › Tennis#',
+            $body,
+            'Still a filter option.'
+        );
     }
 
     /**
@@ -291,6 +302,7 @@ final class ProductControllerTest extends TestCase
         $this->assertSame(200, $response->getStatusCode());
         $this->assertStringContainsString('<h1>LCD Display 16x2</h1>', $body);
         $this->assertStringContainsString('<a href="/products">Products</a>', $body);
+        $this->assertStringNotContainsString('Multi-buy', $body);
 
         foreach (['£4.50', '£0.68', '£0.12', '£1.55'] as $amount) {
             $this->assertStringContainsString($amount, $body);
@@ -304,7 +316,6 @@ final class ProductControllerTest extends TestCase
                 'Category' => 'Electronics',
                 'Shipping service' => 'CRL48',
                 'Promo percentage' => '7.50%',
-                'Multi-buy tiers' => '2 / 5 / 10',
                 'Updated' => '—',
             ] as $label => $value
         ) {
@@ -434,7 +445,14 @@ final class ProductControllerTest extends TestCase
 
         $factory = new Psr17Factory();
 
-        return new ProductController(new PlatesRender(), $factory, $factory, $em, new CategoryPaths($em));
+        return new ProductController(
+            new PlatesRender(),
+            $factory,
+            $factory,
+            $em,
+            new CategoryPaths($em),
+            new StockLevels($em)
+        );
     }
 
     /**

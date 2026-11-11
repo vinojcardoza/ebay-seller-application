@@ -9,11 +9,16 @@
  * @var string|null $title Page title, shown in the tab and page header.
  * @var array<string, string|null>|null $breadcrumbs Trail after "Home", label => URL (null for the current page).
  *
+ * Shared by the renderer:
+ *
+ * @var \App\Entities\User|null $currentUser The logged-in user, if any.
+ *
  * Views can also fill an `actions` section with buttons for the page header.
  */
 
-$title = $title ?? 'Business App';
+$title = $title ?? 'JRN Shop';
 $breadcrumbs = $breadcrumbs ?? [];
+$currentUser = $currentUser ?? null;
 $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
 
 $navItems = [
@@ -42,7 +47,9 @@ $isActive = static function (array $item) use ($path): bool {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?php echo $this->e($title); ?> · Business App</title>
+    <title><?php echo $this->e($title); ?> · JRN Shop</title>
+    <link rel="icon" type="image/png" sizes="64x64" href="/assets/img/favicon-64.png">
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
     <script>
         // Apply the saved theme before first paint to avoid a light flash in dark mode.
         try {
@@ -62,8 +69,8 @@ $isActive = static function (array $item) use ($path): bool {
 <body>
     <header class="app-header">
         <a class="app-brand" href="/">
-            <span class="app-brand-mark"><i class="ti ti-building-store" aria-hidden="true"></i></span>
-            Business
+            <img class="app-brand-logo" src="/assets/img/logo-light-64.jpg" width="32" height="32" alt="">
+            JRN Shop
         </a>
 
         <nav class="app-nav" id="app-nav" aria-label="Main navigation">
@@ -86,6 +93,17 @@ $isActive = static function (array $item) use ($path): bool {
                 <i class="ti ti-moon" aria-hidden="true"></i>
             </button>
             <span class="app-avatar" aria-hidden="true"><i class="ti ti-user"></i></span>
+            <?php if ($currentUser !== null) : ?>
+                <span class="app-user-name"><?php echo $this->e($currentUser->getFullName() ?: $currentUser->getLogin()); ?></span>
+                <a class="app-icon-btn" href="/account/password" aria-label="Change password" title="Change password">
+                    <i class="ti ti-key" aria-hidden="true"></i>
+                </a>
+                <form method="post" action="/logout" class="d-inline">
+                    <button type="submit" class="app-icon-btn" aria-label="Log out" title="Log out">
+                        <i class="ti ti-logout" aria-hidden="true"></i>
+                    </button>
+                </form>
+            <?php endif; ?>
             <button type="button" class="app-icon-btn app-nav-toggle" data-nav-toggle
                     aria-controls="app-nav" aria-expanded="false" aria-label="Toggle navigation">
                 <i class="ti ti-menu-2" aria-hidden="true"></i>
@@ -123,7 +141,7 @@ $isActive = static function (array $item) use ($path): bool {
             <?php echo $this->section('content'); ?>
         </main>
 
-        <footer class="app-footer">&copy; <?php echo date('Y'); ?> Business App</footer>
+        <footer class="app-footer">&copy; <?php echo date('Y'); ?> JRN Shop</footer>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

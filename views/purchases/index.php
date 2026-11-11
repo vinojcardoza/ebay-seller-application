@@ -13,6 +13,10 @@
  * @var array<int, string> $suppliers Supplier names keyed by ID.
  * @var array<int, string> $statuses Status labels keyed by value.
  * @var string|null $notice Success message.
+ * @var array{ids: list<int>, date: string, errors: array<string, string>} $bulk Bulk delivery form:
+ *     selected purchase IDs, delivery date (Y-m-d) and errors keyed `ids` / `date`.
+ * @var string $listQuery Current filters and page as a query string, kept by the bulk form.
+ * @var string $today Today's date (Y-m-d), the latest allowed delivery date.
  */
 
 use App\Entities\Purchase;
@@ -30,6 +34,12 @@ $pageUrl = static fn (int $number): string => '/purchases?' . http_build_query(a
     'q' => $filters['q'],
     'page' => $number > 1 ? $number : null,
 ], static fn ($value): bool => $value !== null && $value !== ''));
+
+$pendingOnPage = array_filter(
+    $purchases,
+    static fn (Purchase $purchase): bool => $purchase->getStatus() !== Purchase::STATUS_DELIVERED
+);
+$bulkAction = '/purchases/receive' . ($listQuery !== '' ? '?' . $listQuery : '');
 
 $kpis = [
     ['label' => $filtered ? 'Spend (filtered)' : 'Total spend', 'value' => '£' . number_format((float) $summary['spend'], 2), 'icon' => 'ti-currency-pound', 'tint' => 'primary'],
@@ -106,6 +116,35 @@ $kpis = [
         </form>
     </div>
 
+    <?php if ($pendingOnPage !== []) : ?>
+        <form id="bulk-receive" method="post" action="<?php echo $this->e($bulkAction); ?>"
+              class="card-body border-bottom row g-2 align-items-end" novalidate>
+            <?php if (isset($bulk['errors']['ids'])) : ?>
+                <div class="col-12">
+                    <div class="alert alert-danger mb-0" role="alert"><?php echo $this->e($bulk['errors']['ids']); ?></div>
+                </div>
+            <?php endif; ?>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="received_date">Delivery date</label>
+                <input class="form-control<?php echo isset($bulk['errors']['date']) ? ' is-invalid' : ''; ?>" type="date"
+                       id="received_date" name="received_date" max="<?php echo $today; ?>" required
+                       value="<?php echo $this->e($bulk['date']); ?>"
+                    <?php echo isset($bulk['errors']['date']) ? 'aria-invalid="true" aria-describedby="received_date-error"' : ''; ?>>
+                <?php if (isset($bulk['errors']['date'])) : ?>
+                    <div class="invalid-feedback" id="received_date-error"><?php echo $this->e($bulk['errors']['date']); ?></div>
+                <?php endif; ?>
+            </div>
+            <div class="col-auto d-flex align-items-center gap-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="ti ti-truck-delivery" aria-hidden="true"></i> Mark selected delivered
+                </button>
+                <span class="small text-body-secondary" data-check-count="receive" aria-live="polite">
+                    Tick pending purchases below to select them.
+                </span>
+            </div>
+        </form>
+    <?php endif; ?>
+
     <?php if ($purchases === []) : ?>
         <div class="empty-state">
             <i class="ti ti-receipt-off" aria-hidden="true"></i>
@@ -116,6 +155,12 @@ $kpis = [
             <table class="table table-hover align-middle">
                 <thead>
                     <tr>
+                        <th class="text-center" style="width: 1%">
+                            <?php if ($pendingOnPage !== []) : ?>
+                                <input class="form-check-input" type="checkbox" data-check-all="receive"
+                                       aria-label="Select all pending purchases on this page">
+                            <?php endif; ?>
+                        </th>
                         <th>Purchased</th>
                         <th>Supplier</th>
                         <th>Product</th>
@@ -135,6 +180,14 @@ $kpis = [
                         $quantity = $purchase->getQuantity();
                         ?>
                         <tr>
+                            <td class="text-center">
+                                <?php if (!$delivered) : ?>
+                                    <input class="form-check-input" type="checkbox" form="bulk-receive" name="ids[]"
+                                           value="<?php echo $purchase->getId(); ?>" data-check-group="receive"
+                                           aria-label="Select purchase of <?php echo $this->e($product?->getTitle() ?? 'unknown product'); ?>"
+                                        <?php echo in_array($purchase->getId(), $bulk['ids'], true) ? 'checked' : ''; ?>>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-nowrap"><?php echo $purchase->getPurchasedDate()->format('d M Y'); ?></td>
                             <td class="text-nowrap"><?php echo $this->e($purchase->getSupplier()?->getSupplierName() ?? '—'); ?></td>
                             <td>
