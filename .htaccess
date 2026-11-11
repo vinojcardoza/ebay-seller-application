@@ -1,20 +1,13 @@
-# Fallback for hosts where the Apache document root cannot be pointed at public/.
-# Sends every request into public/ so src/, config/, vendor/, var/ (eBay tokens) and .env
-# are never served directly. Prefer setting DocumentRoot to public/ instead.
-
-Options -Indexes
-
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteBase /
 
-    # Deny hidden files and directories (.env, .git, ...)
+    # Deny hidden files and directories (.env, .git, etc.)
     RewriteRule (^|/)\. - [F,L]
 
-    RewriteRule ^$ public/ [L]
-    RewriteCond %{REQUEST_URI} !^/public/
-    RewriteRule ^(.*)$ public/$1 [L]
-</IfModule>
+    # Stop processing if the request is already inside public/
+    RewriteRule ^public/ - [L]
 
-<IfModule !mod_rewrite.c>
-    Require all denied
+    # Route everything else into public/
+    RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
