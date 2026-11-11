@@ -18,6 +18,7 @@ use App\Entities\User;
 use Doctrine\ORM\EntityManagerInterface;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+require dirname(__DIR__) . '/config/environment.php';
 
 if (PHP_SAPI !== 'cli') {
     exit(1);

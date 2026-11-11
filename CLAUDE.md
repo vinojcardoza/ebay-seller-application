@@ -18,7 +18,7 @@ docker compose up -d --build
 - phpMyAdmin: http://localhost:8182
 - The database host comes from `MARIADB_HOST` (default `mariadb`, the Compose service name). `others_business.sql` is a large sample database dump to import (e.g. via phpMyAdmin).
 
-DB credentials reach PHP as container environment variables set by `docker-compose.yml` and are read from `$_ENV`. `vlucas/phpdotenv` is installed but **not** loaded in `bootstrap.php`, so `.env` is only consumed by Compose.
+Configuration (DB credentials, `EBAY_*`) is read from `$_ENV`. `config/environment.php` (required by `src/bootstrap.php` and `bin/set-password.php`) loads `.env` from the project root with `vlucas/phpdotenv` (`createImmutable` + `safeLoad`) and requires `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_PASSWORD`. Variables already set by the server win, so under Docker the values passed by `docker-compose.yml` apply; on hosts without Docker (e.g. IONOS, where `.htaccess` blocks dotfiles) the `.env` file is the source.
 
 ## Commands
 

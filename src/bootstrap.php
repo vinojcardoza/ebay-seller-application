@@ -14,6 +14,7 @@ define("APP_ROOT", dirname(__DIR__));
 ini_set("display_errors", 1);
 
 require_once APP_ROOT . '/vendor/autoload.php';
+require_once APP_ROOT . '/config/environment.php';
 
 $request = ServerRequest::fromGlobals();
 
