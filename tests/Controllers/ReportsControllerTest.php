@@ -187,28 +187,39 @@ final class ReportsControllerTest extends TestCase
     }
 
     /**
-     * Each chart plots net sales in pounds, with pound axis labels and a "Net sales" table view.
+     * The daily chart plots profit per day in pounds, with pound axis labels and a "Profit" table view;
+     * a loss-making day shows its negative profit but no bar.
      */
-    public function testIndexChartsNetSales(): void
+    public function testIndexChartsDailyProfit(): void
     {
-        $body = $this->body($this->controller()->index());
-        $daily = $this->section($body, 'daily');
+        $daily = $this->section($this->body($this->controller()->index()), 'daily');
 
-        $this->assertStringContainsString('Net sales per day', $daily);
-        $this->assertStringContainsString('£44.50 total', $daily);
-        $this->assertMatchesRegularExpression('#data-tip-value="£40.00"\s+data-tip-label="Tue 10 Nov 2026"#', $daily);
-        $this->assertStringContainsString('aria-label="Tue 10 Nov 2026: £40.00"', $daily);
-        $this->assertStringContainsString('<span>£40</span>', $daily);
+        // 10 Nov: 40.00 − 15.00 − 5.00; 12 Oct: 4.50 − 6.00 − 1.55.
+        $this->assertStringContainsString('Profit per day', $daily);
+        $this->assertStringNotContainsString('Net sales per day', $daily);
+        $this->assertStringContainsString('£16.95 total', $daily);
+        $this->assertMatchesRegularExpression('#data-tip-value="£20.00"\s+data-tip-label="Tue 10 Nov 2026"#', $daily);
+        $this->assertStringContainsString('aria-label="Tue 10 Nov 2026: £20.00"', $daily);
+        $this->assertStringContainsString('aria-label="Mon 12 Oct 2026: −£3.05"', $daily);
+        $this->assertStringContainsString('<span>£20</span>', $daily);
+        $this->assertSame(1, substr_count($daily, 'column-chart-fill'));
         $this->assertSame(30, substr_count($daily, 'class="column-chart-bar"'));
-        $this->assertStringContainsString('<th scope="col" class="text-end">Net sales</th></tr>', $daily);
+        $this->assertStringContainsString('<th scope="col" class="text-end">Profit</th></tr>', $daily);
+    }
 
-        $monthly = $this->section($body, 'monthly');
+    /**
+     * The monthly chart plots net sales per month with a "Net sales" table view.
+     */
+    public function testIndexChartsMonthlyNetSales(): void
+    {
+        $monthly = $this->section($this->body($this->controller()->index()), 'monthly');
         $this->assertStringContainsString('Net sales per month', $monthly);
         $this->assertMatchesRegularExpression(
             '#data-tip-value="£1,000.00"\s+data-tip-label="November 2026"#',
             $monthly
         );
         $this->assertSame(12, substr_count($monthly, 'class="column-chart-bar"'));
+        $this->assertStringContainsString('<th scope="col" class="text-end">Net sales</th></tr>', $monthly);
     }
 
     /**

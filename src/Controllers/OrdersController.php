@@ -170,9 +170,13 @@ class OrdersController extends ControllerAbstract
         $net = (float) ($summaryRow['net'] ?? 0);
         $cost = (float) ($summaryRow['cost'] ?? 0);
         $shipping = (float) ($summaryRow['postage'] ?? 0) + (float) ($summaryRow['packaging'] ?? 0);
+        $products = $this->listProducts(array_map(static fn (array $row): int => (int) $row['id'], $rows));
 
         return $this->render('orders/index', [
-            'orders' => array_map(fn (array $row): array => $this->listRow($row), $rows),
+            'orders' => array_map(
+                fn (array $row): array => $this->listRow($row) + ['products' => $products[(int) $row['id']] ?? []],
+                $rows
+            ),
             'summary' => [
                 'orders' => $total,
                 'net' => $this->money($net),
@@ -558,6 +562,41 @@ class OrdersController extends ControllerAbstract
             'net' => $this->money($net),
             'profit' => $this->money($profit),
         ];
+    }
+
+    /**
+     * Products and quantities for the listed orders, in item order, in one query.
+     *
+     * @param list<int> $orderIds
+     *
+     * @return array<int, list<array{title: string, sku: string, quantity: int, cost: string}>> Keyed by
+     *     order ID; `cost` is the unit item cost.
+     */
+    private function listProducts(array $orderIds): array
+    {
+        if ($orderIds === []) {
+            return [];
+        }
+
+        $rows = $this->em->getConnection()->fetchAllAssociative(
+            'SELECT oi.order_id, oi.quantity, oi.item_cost, p.title, p.sku FROM order_items oi'
+            . ' LEFT JOIN products p ON p.id = oi.product'
+            . ' WHERE oi.order_id IN (' . implode(', ', array_fill(0, count($orderIds), '?')) . ')'
+            . ' ORDER BY oi.order_id, oi.id',
+            $orderIds
+        );
+
+        $products = [];
+        foreach ($rows as $row) {
+            $products[(int) $row['order_id']][] = [
+                'title' => (string) ($row['title'] ?? 'Unknown product'),
+                'sku' => (string) ($row['sku'] ?? ''),
+                'quantity' => (int) ($row['quantity'] ?? 0),
+                'cost' => $this->money((float) ($row['item_cost'] ?? 0)),
+            ];
+        }
+
+        return $products;
     }
 
     /**

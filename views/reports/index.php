@@ -2,8 +2,8 @@
 
 /**
  * View: Sales reports — last 30 days by day and the last 12 months by month,
- * each with summary figures and a net sales chart; the monthly report also
- * has a breakdown table.
+ * each with summary figures and a chart (profit per day, net sales per month);
+ * the monthly report also has a breakdown table.
  *
  * @var \League\Plates\Template\Template $this
  * @var array{rows: list<array<string, mixed>>, totals: array<string, int|float>, chart: array<string, mixed>,
@@ -43,7 +43,8 @@ $sections = [
         'id' => 'daily',
         'heading' => 'Last 30 days',
         'period' => $daily['from']->format('j M') . ' – ' . $daily['to']->format('j M Y'),
-        'chartTitle' => 'Net sales per day',
+        'chartTitle' => 'Profit per day',
+        'chartValue' => 'Profit',
         'tableTitle' => null,
         'report' => $daily,
     ],
@@ -52,6 +53,7 @@ $sections = [
         'heading' => 'Monthly',
         'period' => $monthly['from']->format('M Y') . ' – ' . $monthly['to']->format('M Y'),
         'chartTitle' => 'Net sales per month',
+        'chartValue' => 'Net sales',
         'tableTitle' => 'Monthly breakdown',
         'periodHeading' => 'Month',
         'report' => $monthly,
@@ -91,7 +93,7 @@ $sections = [
                     'series' => $section['report']['chart'],
                     'format' => $money,
                     'tickFormat' => $tickMoney,
-                    'valueHeading' => 'Net sales',
+                    'valueHeading' => $section['chartValue'],
                 ]) ?>
             </div>
         </div>

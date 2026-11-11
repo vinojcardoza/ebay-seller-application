@@ -82,6 +82,13 @@ final class OrdersControllerTest extends TestCase
     private array $listRows = [];
 
     /**
+     * Item rows (order_id, quantity, item_cost, title, sku) the list's products query returns.
+     *
+     * @var list<array<string, mixed>>
+     */
+    private array $productRows = [];
+
+    /**
      * Controller under test (clock: 2026-11-10 12:00).
      */
     private OrdersController $controller;
@@ -143,6 +150,17 @@ final class OrdersControllerTest extends TestCase
             ],
         ];
 
+        $this->productRows = [
+            [
+                'order_id' => 5, 'quantity' => 2, 'item_cost' => '0.45',
+                'title' => 'Voltage Regulator L7824', 'sku' => 'VOLT-L7824',
+            ],
+            [
+                'order_id' => 5, 'quantity' => 0, 'item_cost' => null,
+                'title' => 'Heatsink TO-220', 'sku' => 'TO220-HTSNK',
+            ],
+        ];
+
         $connection = $this->createStub(Connection::class);
         $connection->method('fetchAssociative')->willReturnCallback(function (string $sql, array $params = []): array {
             $this->queries[] = [$sql, $params];
@@ -153,7 +171,7 @@ final class OrdersControllerTest extends TestCase
             function (string $sql, array $params = []): array {
                 $this->queries[] = [$sql, $params];
 
-                return $this->listRows;
+                return str_contains($sql, 'FROM order_items oi') ? $this->productRows : $this->listRows;
             }
         );
 
@@ -219,6 +237,39 @@ final class OrdersControllerTest extends TestCase
         $this->assertStringContainsString('−£3.27', $refund);
         $this->assertStringContainsString('tint-warning">None', $refund);
         $this->assertStringContainsString('tint-success">Delivered', $refund);
+        $this->assertStringContainsString('<span class="text-body-secondary">—</span>', $refund);
+    }
+
+    /**
+     * Each listed order shows its products with quantities and unit costs, fetched in one query for the page's orders.
+     */
+    public function testIndexListsProductsAndQuantities(): void
+    {
+        $body = $this->body($this->controller->index($this->get()));
+
+        [$sql, $params] = $this->queries[2];
+        $this->assertStringContainsString('WHERE oi.order_id IN (?, ?)', $sql);
+        $this->assertSame([5, 7], $params);
+
+        $first = $this->rowFor($body, '/orders/5"');
+        $this->assertMatchesRegularExpression('/2 ×<\/span>\s*Voltage Regulator L7824/', $first);
+        $this->assertMatchesRegularExpression('/0 ×<\/span>\s*Heatsink TO-220/', $first);
+        $this->assertStringContainsString('title="VOLT-L7824"', $first);
+        $this->assertStringContainsString('@ £0.45', $first);
+        $this->assertStringContainsString('@ £0.00', $first, 'A missing item cost shows as zero.');
+    }
+
+    /**
+     * With no orders on the page the products query is skipped.
+     */
+    public function testIndexSkipsProductsQueryWithoutOrders(): void
+    {
+        $this->listRows = [];
+        $this->summaryRow = ['orders' => 0];
+
+        $this->controller->index($this->get());
+
+        $this->assertCount(2, $this->queries);
     }
 
     /**
@@ -274,7 +325,7 @@ final class OrdersControllerTest extends TestCase
     {
         $body = $this->body($this->controller->index($this->get($query)));
 
-        foreach ($this->queries as [$sql, $bound]) {
+        foreach (array_slice($this->queries, 0, 2) as [$sql, $bound]) {
             $this->assertStringContainsString('WHERE ' . $condition, $sql);
             $this->assertSame($params, $bound);
         }

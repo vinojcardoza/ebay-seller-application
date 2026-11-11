@@ -5,7 +5,8 @@
  *
  * @var \League\Plates\Template\Template $this
  * @var list<array<string, mixed>> $orders Current page rows (id, reference, date, platform, type,
- *     name, ebayUser, tracking, delivered, items, units, net, profit).
+ *     name, ebayUser, tracking, delivered, items, units, net, profit, and products: a list of
+ *     {title, sku, quantity, cost} for each item line, cost being the unit item cost).
  * @var array{orders: int, net: string, cost: string, shipping: string, profit: string} $summary
  * @var int $total Orders matching the filters.
  * @var int $page Current page.
@@ -147,7 +148,8 @@ $kpis = [
                         <th>Reference</th>
                         <th>Buyer</th>
                         <th>Type</th>
-                        <th class="text-end">Items</th>
+                        <th>Products</th>
+                        <th class="text-end">Units</th>
                         <th class="text-end">Net</th>
                         <th class="text-end">Profit</th>
                         <th>Tracking</th>
@@ -170,6 +172,21 @@ $kpis = [
                                 <?php endif; ?>
                             </td>
                             <td><span class="badge <?php echo $typeBadge($order['type']); ?>"><?php echo $this->e($order['type']); ?></span></td>
+                            <td>
+                                <?php if ($order['products'] === []) : ?>
+                                    <span class="text-body-secondary">—</span>
+                                <?php else : ?>
+                                    <ul class="list-unstyled mb-0 small">
+                                        <?php foreach ($order['products'] as $product) : ?>
+                                            <li title="<?php echo $this->e($product['sku']); ?>">
+                                                <span class="fw-semibold"><?php echo $product['quantity']; ?> ×</span>
+                                                <?php echo $this->e($product['title']); ?>
+                                                <span class="text-body-secondary text-nowrap">@ <?php echo $pounds($product['cost']); ?></span>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-end">
                                 <?php if ($order['items'] === 0) : ?>
                                     <span class="badge tint-warning">None</span>

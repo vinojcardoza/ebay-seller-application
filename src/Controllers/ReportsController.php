@@ -67,7 +67,7 @@ class ReportsController extends ControllerAbstract
     }
 
     /**
-     * Sales per day for the DAYS days ending today.
+     * Sales per day for the DAYS days ending today, charting profit per day.
      *
      * @return array<string, mixed> See report().
      */
@@ -87,7 +87,7 @@ class ReportsController extends ControllerAbstract
             ]);
         }
 
-        return $this->report($rows, $start, $today);
+        return $this->report($rows, $start, $today, 'profit');
     }
 
     /**
@@ -162,15 +162,20 @@ class ReportsController extends ControllerAbstract
     }
 
     /**
-     * A report: its rows, the totals across them, and a net sales chart series.
+     * A report: its rows, the totals across them, and a chart series of one figure per row.
      *
      * @param list<array<string, mixed>> $rows Rows from row(), oldest first.
+     * @param 'net'|'profit' $chartKey Row figure the chart plots.
      *
      * @return array{rows: list<array<string, mixed>>, totals: array<string, int|float>,
      *     chart: array<string, mixed>, from: DateTimeImmutable, to: DateTimeImmutable}
      */
-    private function report(array $rows, DateTimeImmutable $from, DateTimeImmutable $to): array
-    {
+    private function report(
+        array $rows,
+        DateTimeImmutable $from,
+        DateTimeImmutable $to,
+        string $chartKey = 'net',
+    ): array {
         $totals = [];
 
         foreach (['orders', 'units', ...self::AMOUNTS, 'profit'] as $key) {
@@ -182,7 +187,11 @@ class ReportsController extends ControllerAbstract
         }
 
         $points = array_map(
-            static fn (array $row): array => ['label' => $row['label'], 'axis' => $row['axis'], 'value' => $row['net']],
+            static fn (array $row): array => [
+                'label' => $row['label'],
+                'axis' => $row['axis'],
+                'value' => $row[$chartKey],
+            ],
             $rows
         );
 
