@@ -447,7 +447,7 @@ class OrdersController extends ControllerAbstract
                 ['order' => $order],
                 ['transactionDatetime' => 'ASC']
             ),
-            'productGroups' => $this->productGroups(),
+            'productGroups' => $this->productGroups($itemValues['product'] ?? ''),
             'itemValues' => $itemValues ?? [
                 'product' => '',
                 'quantity' => '1',
@@ -504,7 +504,7 @@ class OrdersController extends ControllerAbstract
             'item' => $item,
             'values' => $values,
             'errors' => $errors,
-            'productGroups' => $this->productGroups(),
+            'productGroups' => $this->productGroups($values['product'] ?? ''),
         ], $errors === [] ? 200 : 422);
     }
 
@@ -879,16 +879,23 @@ class OrdersController extends ControllerAbstract
     }
 
     /**
-     * Products grouped by category path for the product select.
+     * Products grouped by category path for the product select; inactive products are left out
+     * unless already selected.
+     *
+     * @param string $selected Product ID already chosen in the form, kept even when inactive.
      *
      * @return array<string, array<int, string>> Group label => [product ID => "Title (SKU)"].
      */
-    private function productGroups(): array
+    private function productGroups(string $selected = ''): array
     {
         $paths = $this->categoryPaths->labels();
         $groups = [];
 
         foreach ($this->em->getRepository(Product::class)->findBy([], ['title' => 'ASC']) as $product) {
+            if ($product->getStatus() !== Product::STATUS_ACTIVE && (string) $product->getId() !== $selected) {
+                continue;
+            }
+
             $categoryId = $product->getCategory()?->getId();
             $group = $categoryId !== null ? ($paths[$categoryId] ?? 'Uncategorised') : 'Uncategorised';
             $groups[$group][$product->getId()] = $product->getTitle() . ' (' . $product->getSku() . ')';

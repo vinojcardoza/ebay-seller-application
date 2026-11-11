@@ -697,6 +697,33 @@ final class OrdersControllerTest extends TestCase
     }
 
     /**
+     * The add-item picker leaves out inactive products.
+     */
+    public function testShowHidesInactiveProducts(): void
+    {
+        $this->find(Product::class, 410)->setStatus(Product::STATUS_INACTIVE);
+
+        $body = $this->body($this->controller->show($this->get(), ['id' => '5']));
+
+        $this->assertStringNotContainsString('<option value="410"', $body);
+        $this->assertStringContainsString('<option value="470"', $body);
+    }
+
+    /**
+     * The item edit form keeps the item's product selected even when it is inactive.
+     */
+    public function testEditItemFormKeepsInactiveSelectedProduct(): void
+    {
+        $this->find(Product::class, 470)->setStatus(Product::STATUS_INACTIVE);
+        $this->find(Product::class, 410)->setStatus(Product::STATUS_INACTIVE);
+
+        $body = $this->body($this->controller->editItem($this->get(), ['id' => '5', 'itemId' => '1']));
+
+        $this->assertMatchesRegularExpression('#<option value="470" selected>#', $body);
+        $this->assertStringNotContainsString('<option value="410"', $body);
+    }
+
+    /**
      * The item edit form is prefilled.
      */
     public function testEditItemForm(): void

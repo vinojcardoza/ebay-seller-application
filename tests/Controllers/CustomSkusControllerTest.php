@@ -494,6 +494,33 @@ final class CustomSkusControllerTest extends TestCase
     }
 
     /**
+     * The add-product picker on the show page leaves out inactive products.
+     */
+    public function testShowHidesInactiveProducts(): void
+    {
+        $this->find(Product::class, 410)->setStatus(Product::STATUS_INACTIVE);
+
+        $body = $this->body($this->controller->show($this->get(), ['id' => '105']));
+
+        $this->assertStringNotContainsString('<option value="410"', $body);
+        $this->assertStringContainsString('<option value="470"', $body);
+    }
+
+    /**
+     * The line edit form keeps the line's product selected even when it is inactive.
+     */
+    public function testEditLineFormKeepsInactiveSelectedProduct(): void
+    {
+        $this->find(Product::class, 300)->setStatus(Product::STATUS_INACTIVE);
+        $this->find(Product::class, 410)->setStatus(Product::STATUS_INACTIVE);
+
+        $body = $this->body($this->controller->editLine($this->get(), ['id' => '50', 'lineId' => '3']));
+
+        $this->assertMatchesRegularExpression('#<option value="300" selected>#', $body);
+        $this->assertStringNotContainsString('<option value="410"', $body);
+    }
+
+    /**
      * The line edit form is prefilled with the line's values.
      */
     public function testEditLineForm(): void

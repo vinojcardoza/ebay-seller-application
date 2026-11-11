@@ -330,7 +330,7 @@ class CustomSkusController extends ControllerAbstract
             'customSku' => $customSku,
             'lines' => $lines,
             'totals' => $this->totals($customSku, $lines),
-            'products' => $this->productOptions(),
+            'products' => $this->productOptions($lineValues['product'] ?? ''),
             'lineValues' => $lineValues ?? ['product' => '', 'quantity' => '1', 'price' => '', 'fees' => ''],
             'lineErrors' => $lineErrors,
             'notice' => $notice,
@@ -374,7 +374,7 @@ class CustomSkusController extends ControllerAbstract
             'line' => $line,
             'values' => $values,
             'errors' => $errors,
-            'products' => $this->productOptions(),
+            'products' => $this->productOptions($values['product']),
         ], $errors === [] ? 200 : 422);
     }
 
@@ -555,15 +555,22 @@ class CustomSkusController extends ControllerAbstract
     }
 
     /**
-     * Products for the select, labelled "Title (SKU)" and sorted by title.
+     * Active products for the select, labelled "Title (SKU)" and sorted by title;
+     * an inactive product is only listed when it is already selected.
+     *
+     * @param string $selected Product ID already chosen in the form, kept even when inactive.
      *
      * @return array<int, string>
      */
-    private function productOptions(): array
+    private function productOptions(string $selected = ''): array
     {
         $options = [];
 
         foreach ($this->em->getRepository(Product::class)->findBy([], ['title' => 'ASC']) as $product) {
+            if ($product->getStatus() !== Product::STATUS_ACTIVE && (string) $product->getId() !== $selected) {
+                continue;
+            }
+
             $options[$product->getId()] = $product->getTitle() . ' (' . $product->getSku() . ')';
         }
 

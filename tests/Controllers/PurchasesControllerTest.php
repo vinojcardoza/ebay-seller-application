@@ -377,6 +377,33 @@ final class PurchasesControllerTest extends TestCase
     // ---------- edit & update ----------
 
     /**
+     * The create form's product picker leaves out inactive products.
+     */
+    public function testCreateFormHidesInactiveProducts(): void
+    {
+        $this->find(Product::class, 410)->setStatus(Product::STATUS_INACTIVE);
+
+        $body = $this->body($this->controller->create());
+
+        $this->assertStringNotContainsString('<option value="410"', $body);
+        $this->assertStringContainsString('<option value="300"', $body);
+    }
+
+    /**
+     * The edit form keeps the purchase's product selected even when it is inactive.
+     */
+    public function testEditFormKeepsInactiveSelectedProduct(): void
+    {
+        $this->find(Product::class, 300)->setStatus(Product::STATUS_INACTIVE);
+        $this->find(Product::class, 410)->setStatus(Product::STATUS_INACTIVE);
+
+        $body = $this->body($this->controller->edit($this->get(), ['id' => '8']));
+
+        $this->assertMatchesRegularExpression('#<option value="300" selected>#', $body);
+        $this->assertStringNotContainsString('<option value="410"', $body);
+    }
+
+    /**
      * The edit form is prefilled, including the received date and delete button.
      */
     public function testEditForm(): void

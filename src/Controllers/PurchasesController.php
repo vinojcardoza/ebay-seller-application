@@ -413,7 +413,7 @@ class PurchasesController extends ControllerAbstract
             'values' => $values,
             'errors' => $errors,
             'suppliers' => $this->supplierOptions(),
-            'productGroups' => $this->productGroups(),
+            'productGroups' => $this->productGroups($values['product'] ?? ''),
             'statuses' => self::STATUSES,
         ], $errors === [] ? 200 : 422);
     }
@@ -645,16 +645,23 @@ class PurchasesController extends ControllerAbstract
     }
 
     /**
-     * Products grouped by category path for the product select (legacy grouped them the same way).
+     * Products grouped by category path for the product select; inactive products are left out
+     * unless already selected (legacy grouped them the same way).
+     *
+     * @param string $selected Product ID already chosen in the form, kept even when inactive.
      *
      * @return array<string, array<int, string>> Group label => [product ID => "Title (SKU)"].
      */
-    private function productGroups(): array
+    private function productGroups(string $selected = ''): array
     {
         $paths = $this->categoryPaths->labels();
         $groups = [];
 
         foreach ($this->em->getRepository(Product::class)->findBy([], ['title' => 'ASC']) as $product) {
+            if ($product->getStatus() !== Product::STATUS_ACTIVE && (string) $product->getId() !== $selected) {
+                continue;
+            }
+
             $categoryId = $product->getCategory()?->getId();
             $group = $categoryId !== null ? ($paths[$categoryId] ?? 'Uncategorised') : 'Uncategorised';
             $groups[$group][$product->getId()] = $product->getTitle() . ' (' . $product->getSku() . ')';

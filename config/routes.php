@@ -28,8 +28,12 @@ return function (Router $router) {
     $router->get('/', [IndexController::class, 'index']);
 
     $router->get('/products', [ProductController::class, 'index']);
-
+    $router->get('/products/create', [ProductController::class, 'create']);
+    $router->post('/products', [ProductController::class, 'store']);
     $router->get('/product/{id:number}', [ProductController::class, 'show']);
+    $router->get('/product/{id:number}/edit', [ProductController::class, 'edit']);
+    $router->post('/product/{id:number}', [ProductController::class, 'update']);
+    $router->post('/product/{id:number}/delete', [ProductController::class, 'delete']);
 
     $router->get('/categories', [CategoriesController::class, 'index']);
     $router->get('/categories/create', [CategoriesController::class, 'create']);

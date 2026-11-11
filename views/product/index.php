@@ -7,7 +7,7 @@
  * @var list<\App\Entities\Product> $products Current page.
  * @var array<int, array{stock: int, pending: int, state: string}> $stock Stock by product ID.
  * @var int $total Products matching the filters.
- * @var int $all All products.
+ * @var int $all All products, whatever their status.
  * @var int $page Current page.
  * @var int $pages Number of pages.
  * @var array{q: string, category: int|null, stock: string, shipping: string, status: string} $filters
@@ -16,20 +16,23 @@
  * @var array<string, int> $stockCounts Products per stock filter.
  * @var array<string, string> $stockFilters Stock filter labels.
  * @var array<string, string> $statusFilters Status filter labels.
+ * @var string|null $notice Success message.
  */
 
+use App\Controllers\ProductController;
 use App\Entities\Product;
 
 $this->layout('layout', ['title' => 'Products', 'breadcrumbs' => ['Products' => null]]);
 
 $filtered = $filters['q'] !== '' || $filters['category'] !== null || $filters['stock'] !== ''
-    || $filters['shipping'] !== '' || $filters['status'] !== '';
+    || $filters['shipping'] !== '' || $filters['status'] !== ProductController::DEFAULT_STATUS;
 
 /**
  * URL of this page with the current filters and the given page number.
  */
 $pageUrl = static fn (int $number): string => '/products?' . http_build_query(array_filter(
-    $filters + ['page' => $number > 1 ? $number : null],
+    ['status' => $filters['status'] !== ProductController::DEFAULT_STATUS ? $filters['status'] : null]
+        + $filters + ['page' => $number > 1 ? $number : null],
     static fn ($value): bool => $value !== null && $value !== ''
 ));
 
@@ -38,11 +41,21 @@ $pageUrl = static fn (int $number): string => '/products?' . http_build_query(ar
  */
 $money = static fn (?string $amount): string => $amount !== null && $amount !== '' ? '£' . $amount : '—';
 ?>
+<?php $this->start('actions') ?>
+    <a class="btn btn-primary" href="/products/create">
+        <i class="ti ti-plus" aria-hidden="true"></i> Add product
+    </a>
+<?php $this->stop() ?>
+
+<?php if ($notice !== null) : ?>
+    <div class="alert alert-success" role="status"><?php echo $this->e($notice); ?></div>
+<?php endif; ?>
+
 <div class="card">
     <div class="card-header">
         <h2>Products</h2>
         <span class="text-body-secondary">
-            <?php echo $filtered ? number_format($total) . ' of ' . number_format($all) : number_format($all); ?> products
+            <?php echo $filtered ? number_format($total) . ' of ' . number_format($all) : number_format($total); ?> products
         </span>
     </div>
 
@@ -89,7 +102,6 @@ $money = static fn (?string $amount): string => $amount !== null && $amount !== 
             <div class="col-sm-6 col-md-3 col-xl-1">
                 <label class="form-label" for="status">Status</label>
                 <select class="form-select" id="status" name="status">
-                    <option value="">All</option>
                     <?php foreach ($statusFilters as $value => $label) : ?>
                         <option value="<?php echo $value; ?>" <?php echo $filters['status'] === $value ? 'selected' : ''; ?>>
                             <?php echo $this->e($label); ?>
@@ -111,7 +123,7 @@ $money = static fn (?string $amount): string => $amount !== null && $amount !== 
     <?php if ($products === []) : ?>
         <div class="empty-state">
             <i class="ti ti-package-off" aria-hidden="true"></i>
-            <?php echo $filtered ? 'No products match these filters.' : 'No products yet.'; ?>
+            <?php echo $filtered ? 'No products match these filters.' : ($all > 0 ? 'No active products.' : 'No products yet.'); ?>
         </div>
     <?php else : ?>
         <div class="table-responsive">

@@ -5,6 +5,8 @@
  *
  * @var \League\Plates\Template\Template $this
  * @var \App\Entities\Product $product
+ * @var string|null $notice Success message.
+ * @var list<string> $errors Reasons a delete was refused.
  */
 
 $this->layout('layout', [
@@ -36,7 +38,25 @@ $details = [
 ?>
 <?php $this->start('actions') ?>
     <a class="btn btn-light-secondary" href="/products"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back</a>
+    <a class="btn btn-primary" href="/product/<?php echo $product->getId(); ?>/edit">
+        <i class="ti ti-edit" aria-hidden="true"></i> Edit
+    </a>
 <?php $this->stop() ?>
+
+<?php if ($notice !== null) : ?>
+    <div class="alert alert-success" role="status"><?php echo $this->e($notice); ?></div>
+<?php endif; ?>
+
+<?php if ($errors !== []) : ?>
+    <div class="alert alert-danger" role="alert">
+        <strong>This product can't be deleted.</strong>
+        <ul class="mb-0 mt-1">
+            <?php foreach ($errors as $error) : ?>
+                <li><?php echo $this->e($error); ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+<?php endif; ?>
 
 <div class="row">
     <?php foreach ($pricing as $label => $amount) : ?>
@@ -69,5 +89,20 @@ $details = [
                 <dd class="col-sm-8 col-lg-9"><?php echo $this->e((string) $value); ?></dd>
             <?php endforeach; ?>
         </dl>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Delete product</h2>
+    </div>
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <p class="mb-0">Only possible when no purchases, order items or custom SKUs use it; otherwise set it to Inactive.</p>
+        <form method="post" action="/product/<?php echo $product->getId(); ?>/delete"
+              data-confirm="Delete this product?">
+            <button type="submit" class="btn btn-light-danger">
+                <i class="ti ti-trash" aria-hidden="true"></i> Delete
+            </button>
+        </form>
     </div>
 </div>
