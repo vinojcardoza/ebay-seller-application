@@ -8,6 +8,7 @@ use App\Ebay\EbayException;
 use App\Ebay\EbayNotConnectedException;
 use App\Ebay\Import\FeedbackImporter;
 use App\Entities\Feedback;
+use App\Framework\Chart\ChartScale;
 use App\Framework\Clock\ClockInterface;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\RendererInterface;
@@ -245,7 +246,7 @@ class FeedbackController extends ControllerAbstract
     }
 
     /**
-     * Add a clean y-axis scale (0 and 4 equal steps of 1, 2 or 5 × 10ⁿ) to chart points.
+     * Add a clean y-axis scale (see ChartScale) and the period to chart points.
      *
      * @param list<array{label: string, axis: string, value: int}> $points
      *
@@ -254,24 +255,9 @@ class FeedbackController extends ControllerAbstract
      */
     private function series(array $points, DateTimeImmutable $from, DateTimeImmutable $to): array
     {
-        $values = array_column($points, 'value');
-        $peak = max([0, ...$values]);
-        $rough = max(1, $peak / 4);
-        $magnitude = 10 ** (int) floor(log10($rough));
-        $step = (int) (array_values(array_filter(
-            [1, 2, 5, 10],
-            static fn (int $n): bool => $n * $magnitude >= $rough
-        ))[0] * $magnitude);
-        $max = $step * max(1, (int) ceil($peak / $step));
+        $series = ChartScale::series($points);
 
-        return [
-            'points' => $points,
-            'ticks' => range(0, $max, $step),
-            'max' => $max,
-            'from' => $from,
-            'to' => $to,
-            'total' => array_sum($values),
-        ];
+        return [...$series, 'total' => (int) $series['total'], 'from' => $from, 'to' => $to];
     }
 
     /**

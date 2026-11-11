@@ -8,6 +8,7 @@ use App\Controllers\IndexController;
 use App\Controllers\OrdersController;
 use App\Controllers\ProductController;
 use App\Controllers\PurchasesController;
+use App\Controllers\ReportsController;
 use League\Route\Router;
 
 return function (Router $router) {
@@ -60,6 +61,8 @@ return function (Router $router) {
     $router->post('/purchases/{id:number}', [PurchasesController::class, 'update']);
     $router->post('/purchases/{id:number}/receive', [PurchasesController::class, 'receive']);
     $router->post('/purchases/{id:number}/delete', [PurchasesController::class, 'delete']);
+
+    $router->get('/reports', [ReportsController::class, 'index']);
 
     $router->get('/feedbacks', [FeedbackController::class, 'index']);
     $router->post('/feedbacks/import', [FeedbackController::class, 'import']);
