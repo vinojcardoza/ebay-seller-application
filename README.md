@@ -297,3 +297,9 @@ Request flow: `public/index.php` → `src/bootstrap.php` builds a PSR-7 request 
 | Blank page / 500 | Check PHP is 8.5 and `vendor/` was uploaded; see the PHP error log (`docker compose logs php`). |
 | eBay connect fails to save the token | `var/` is not writable by the PHP user. |
 | `.env` dotenv parse error | Quote values that contain spaces. |
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).

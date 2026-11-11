@@ -1,5 +1,6 @@
 {
     "name": "vinojcardoza/business-mvc-php",
+    "license": "MIT",
     "autoload": {
         "psr-4": {
             "App\\": "src/"
