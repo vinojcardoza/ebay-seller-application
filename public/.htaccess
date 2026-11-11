@@ -1,0 +1,25 @@
+# Apache front controller for the app (equivalent of nginx/default.conf).
+# Requires mod_rewrite and "AllowOverride All" (or at least FileInfo) for this directory.
+
+DirectoryIndex index.php
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Deny hidden files and directories (.htaccess, .git, .env, ...)
+    RewriteRule (^|/)\. - [F,L]
+
+    # Serve existing files and directories (assets, favicon, ...) directly
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else goes to the front controller; League Route reads the original URI
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    # Without mod_rewrite, at least route 404s through the front controller
+    FallbackResource /index.php
+</IfModule>
