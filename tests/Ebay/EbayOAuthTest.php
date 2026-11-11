@@ -20,7 +20,7 @@ use Tests\Support\EbayTestCase;
 final class EbayOAuthTest extends EbayTestCase
 {
     /**
-     * The consent URL carries the client ID, RuName, read-only scopes and state.
+     * The consent URL carries the client ID, RuName, default scopes and state.
      */
     public function testAuthorizationUrl(): void
     {

@@ -168,15 +168,24 @@ final class EbayConfigTest extends TestCase
     }
 
     /**
-     * Only read-only scopes are requested.
+     * The defaults are the base scope, read-only fulfillment and the feedback scope user tokens need.
      */
-    public function testRequestsOnlyReadOnlyScopes(): void
+    public function testDefaultScopes(): void
     {
-        foreach (EbayConfig::SCOPES as $scope) {
-            $this->assertTrue(
-                $scope === 'https://api.ebay.com/oauth/api_scope' || str_ends_with($scope, '.readonly'),
-                "Scope $scope should be read-only."
-            );
-        }
+        $this->assertSame([
+            'https://api.ebay.com/oauth/api_scope',
+            'https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly',
+            'https://api.ebay.com/oauth/api_scope/commerce.feedback',
+        ], EbayConfig::SCOPES);
+    }
+
+    /**
+     * The read-only feedback scope (client-credentials only) does not count as the feedback scope.
+     */
+    public function testReadOnlyFeedbackScopeIsNotEnough(): void
+    {
+        $config = EbayConfig::fromEnvironment(['EBAY_SCOPES' => 'api_scope commerce.feedback.readonly']);
+
+        $this->assertFalse($config->hasScope(EbayConfig::FEEDBACK_SCOPE));
     }
 }

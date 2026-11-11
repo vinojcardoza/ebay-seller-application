@@ -50,7 +50,7 @@ class FeedbackImporter
 
         if (!$this->config->hasScope(EbayConfig::FEEDBACK_SCOPE)) {
             throw new EbayException(
-                'Feedback import needs the commerce.feedback.readonly scope. Add it to EBAY_SCOPES once your'
+                'Feedback import needs the commerce.feedback scope. Add it to EBAY_SCOPES once your'
                 . ' eBay keyset is granted it, then reconnect eBay.'
             );
         }
@@ -148,12 +148,13 @@ class FeedbackImporter
         $price = is_array($line['listingPrice'] ?? null) ? $line['listingPrice'] : [];
         $lineItemId = $this->lineItemId($entry);
         $type = $this->string($entry, 'commentType');
-        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $this->string($comment, 'commentText'));
+        $text = $this->string($comment, 'commentText');
+        $text = trim((string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text));
 
         return (new Feedback())
             ->setFeedbackId($this->string($entry, 'feedbackId'))
             ->setEbayUserId($this->nullable($this->string($provider, 'userId')))
-            ->setCommentText($this->nullable((string) $text))
+            ->setCommentText($this->nullable($text))
             ->setCommentTime($this->date($this->string($entry, 'feedbackEnteredDate')))
             ->setCommentType($type !== '' ? ucfirst(strtolower($type)) : null)
             ->setItemId($this->nullable($this->string($line, 'listingId')))
@@ -203,13 +204,14 @@ class FeedbackImporter
     }
 
     /**
-     * Read a scalar field as a trimmed string ('' when missing).
+     * Read a scalar field as a trimmed string ('' when missing), without
+     * characters the utf8mb3 columns cannot store (see Text::forDatabase()).
      *
      * @param array<array-key, mixed> $data
      */
     private function string(array $data, string $key): string
     {
-        return is_scalar($data[$key] ?? null) ? trim((string) $data[$key]) : '';
+        return is_scalar($data[$key] ?? null) ? Text::forDatabase((string) $data[$key]) : '';
     }
 
     /**

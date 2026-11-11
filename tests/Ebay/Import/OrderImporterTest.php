@@ -160,6 +160,24 @@ final class OrderImporterTest extends TestCase
     }
 
     /**
+     * Emoji in the buyer's name and address (which the utf8mb3 columns cannot store) are removed.
+     */
+    public function testImportRemovesEmojiFromContactDetails(): void
+    {
+        $this->em->expects($this->once())->method('flush');
+        $ebayOrder = $this->ebayOrder();
+        $shipTo = &$ebayOrder['fulfillmentStartInstructions'][0]['shippingStep']['shipTo'];
+        $shipTo['fullName'] = "Jane \u{1F338} Buyer";
+        $shipTo['contactAddress']['addressLine2'] = "Flat 2 \u{1F3E0}";
+        unset($shipTo);
+
+        $order = $this->importer->import($ebayOrder);
+
+        $this->assertSame('Jane Buyer', $order->getFullName());
+        $this->assertSame('Flat 2', $order->getStreet2());
+    }
+
+    /**
      * A product without shipping settings uses the legacy defaults.
      */
     public function testImportUsesShippingDefaults(): void

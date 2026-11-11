@@ -36,14 +36,18 @@ final readonly class EbayConfig
     public const FULFILLMENT_SCOPE = self::SCOPE_PREFIX . '/sell.fulfillment.readonly';
 
     /**
-     * Scope for reading feedback (Feedback API). Not every keyset is granted it.
+     * Scope for reading the seller's own feedback (Feedback API) with a user
+     * token. eBay pairs `commerce.feedback.readonly` with the client-credentials
+     * flow only, so user tokens need this full scope; the app still only reads.
+     * Not every keyset is granted it.
      */
-    public const FEEDBACK_SCOPE = self::SCOPE_PREFIX . '/commerce.feedback.readonly';
+    public const FEEDBACK_SCOPE = self::SCOPE_PREFIX . '/commerce.feedback';
 
     /**
-     * Default OAuth scopes. Read-only: the app only reads orders, shipping
-     * fulfillments and feedback. Override with EBAY_SCOPES when the keyset is
-     * not granted all of them (eBay then answers "invalid_scope").
+     * Default OAuth scopes. The app only reads orders, shipping fulfillments
+     * and feedback (read-only scopes except feedback; see FEEDBACK_SCOPE).
+     * Override with EBAY_SCOPES when the keyset is not granted all of them
+     * (eBay then answers "invalid_scope").
      */
     public const SCOPES = [self::SCOPE_PREFIX, self::FULFILLMENT_SCOPE, self::FEEDBACK_SCOPE];
 

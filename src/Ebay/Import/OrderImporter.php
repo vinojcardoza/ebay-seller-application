@@ -433,13 +433,14 @@ class OrderImporter
     }
 
     /**
-     * Read a scalar field as a trimmed string ('' when missing).
+     * Read a scalar field as a trimmed string ('' when missing), without
+     * characters the utf8mb3 columns cannot store (see Text::forDatabase()).
      *
      * @param array<array-key, mixed> $data
      */
     private function string(array $data, string $key): string
     {
-        return is_scalar($data[$key] ?? null) ? trim((string) $data[$key]) : '';
+        return is_scalar($data[$key] ?? null) ? Text::forDatabase((string) $data[$key]) : '';
     }
 
     /**

@@ -119,14 +119,14 @@ final class EbayControllerTest extends TestCase
         $this->importer->method('preview')->willReturn([]);
 
         $default = $this->body($this->controller()->index($this->get('/ebay')));
-        $this->assertStringContainsString('/commerce.feedback.readonly', $default);
-        $this->assertStringNotContainsString('Needs the <code>commerce.feedback.readonly</code>', $default);
+        $this->assertStringContainsString('<div>/commerce.feedback</div>', $default);
+        $this->assertStringNotContainsString('Needs the <code>commerce.feedback</code>', $default);
 
         $limited = $this->body($this->controller(scopes: [EbayConfig::SCOPE_PREFIX, EbayConfig::FULFILLMENT_SCOPE])
             ->index($this->get('/ebay')));
         $this->assertStringContainsString('<div>api_scope</div>', $limited);
         $this->assertStringContainsString('<div>/sell.fulfillment.readonly</div>', $limited);
-        $this->assertStringContainsString('Needs the <code>commerce.feedback.readonly</code> scope', $limited);
+        $this->assertStringContainsString('Needs the <code>commerce.feedback</code> scope', $limited);
         $this->assertMatchesRegularExpression('#action="/ebay/feedback">\s*<button[^>]*\s+disabled>#', $limited);
     }
 

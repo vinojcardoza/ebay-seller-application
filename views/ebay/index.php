@@ -121,7 +121,7 @@ $matchBadge = static fn (?string $match): string => match ($match) {
                         <p class="mb-0 small">New feedback left by buyers.</p>
                         <?php if (!$config->hasScope(\App\Ebay\EbayConfig::FEEDBACK_SCOPE)) : ?>
                             <p class="mb-0 small text-body-secondary">
-                                Needs the <code>commerce.feedback.readonly</code> scope in <code>EBAY_SCOPES</code>.
+                                Needs the <code>commerce.feedback</code> scope in <code>EBAY_SCOPES</code>.
                             </p>
                         <?php endif; ?>
                     </div>

@@ -137,6 +137,40 @@ final class FeedbackImporterTest extends TestCase
     }
 
     /**
+     * Emoji (which the utf8mb3 columns cannot store) are removed from the comment and item title.
+     */
+    public function testImportRemovesEmoji(): void
+    {
+        $this->em->expects($this->once())->method('flush');
+        $entry = $this->entry('F1', '155431189738-10083175563407');
+        $entry['feedbackComment']['commentText'] = "Great seller \u{1F44D}\u{1F44D} fast delivery \u{1F600}";
+        $entry['orderLineItemSummary']['listingTitle'] = "LCD Display 16x2 \u{2B50}\u{FE0F} \u{1F525}";
+        $this->pages[0] = [$entry];
+        $this->total = 1;
+
+        $this->importer()->import();
+
+        $this->assertSame('Great seller fast delivery', $this->persisted[0]->getCommentText());
+        $this->assertSame("LCD Display 16x2 \u{2B50}\u{FE0F}", $this->persisted[0]->getItemTitle());
+    }
+
+    /**
+     * A comment that is only emoji is stored as NULL.
+     */
+    public function testImportStoresEmojiOnlyCommentAsNull(): void
+    {
+        $this->em->expects($this->once())->method('flush');
+        $entry = $this->entry('F1', '155431189738-10083175563407');
+        $entry['feedbackComment']['commentText'] = "\u{1F44D}";
+        $this->pages[0] = [$entry];
+        $this->total = 1;
+
+        $this->importer()->import();
+
+        $this->assertNull($this->persisted[0]->getCommentText());
+    }
+
+    /**
      * Feedback from sellers, and entries already stored (by feedback ID or line item), are skipped.
      */
     public function testSkipsNonBuyerAndExistingFeedback(): void
@@ -249,7 +283,7 @@ final class FeedbackImporterTest extends TestCase
             (new FeedbackImporter($this->em, $this->api, $config))->import();
             $this->fail('Expected an exception.');
         } catch (EbayException $e) {
-            $this->assertStringContainsString('needs the commerce.feedback.readonly scope', $e->getMessage());
+            $this->assertStringContainsString('needs the commerce.feedback scope', $e->getMessage());
         }
 
         $this->assertSame([], $this->requestedOffsets);
