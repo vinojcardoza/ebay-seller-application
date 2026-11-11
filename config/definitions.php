@@ -42,7 +42,7 @@ return [
 
         $params = [
             'driver' => 'pdo_mysql',
-            'host' => 'mariadb',
+            'host' => $_ENV['MARIADB_HOST'] ?? 'mariadb',
             'port' => 3306,
             'dbname' => $_ENV['MARIADB_DATABASE'],
             'user' => $_ENV['MARIADB_USER'],

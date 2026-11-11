@@ -16,7 +16,7 @@ docker compose up -d --build
 
 - App (nginx → php-fpm): http://localhost:8181 — nginx document root is `public/`, all requests fall through to `public/index.php`
 - phpMyAdmin: http://localhost:8182
-- MariaDB service hostname is `mariadb` (hardcoded in `config/definitions.php`). `others_business.sql` is a large sample database dump to import (e.g. via phpMyAdmin).
+- The database host comes from `MARIADB_HOST` (default `mariadb`, the Compose service name). `others_business.sql` is a large sample database dump to import (e.g. via phpMyAdmin).
 
 DB credentials reach PHP as container environment variables set by `docker-compose.yml` and are read from `$_ENV`. `vlucas/phpdotenv` is installed but **not** loaded in `bootstrap.php`, so `.env` is only consumed by Compose.
 
