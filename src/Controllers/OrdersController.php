@@ -648,7 +648,8 @@ class OrdersController extends ControllerAbstract
 
     /**
      * Shape a list query row for the view, adding the profit. Gross is the
-     * items' sold price before fees; net is after fees.
+     * items' sold price before fees; net is after fees; postage and packaging
+     * are the order's shipping costs.
      *
      * @param array<string, mixed> $row
      *
@@ -657,7 +658,9 @@ class OrdersController extends ControllerAbstract
     private function listRow(array $row): array
     {
         $net = (float) $row['net'];
-        $profit = $net - (float) $row['cost'] - (float) $row['postage_cost'] - (float) $row['packaging_cost'];
+        $postage = (float) $row['postage_cost'];
+        $packaging = (float) $row['packaging_cost'];
+        $profit = $net - (float) $row['cost'] - $postage - $packaging;
 
         return [
             'id' => (int) $row['id'],
@@ -673,6 +676,8 @@ class OrdersController extends ControllerAbstract
             'units' => (int) $row['units'],
             'gross' => $this->money((float) $row['gross']),
             'net' => $this->money($net),
+            'postage' => $this->money($postage),
+            'packaging' => $this->money($packaging),
             'profit' => $this->money($profit),
         ];
     }

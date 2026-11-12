@@ -243,7 +243,8 @@ final class OrdersControllerTest extends TestCase
     // ---------- index ----------
 
     /**
-     * The list shows totals and each order's reference, buyer, type, units, gross, net, profit and tracking.
+     * The list shows totals and each order's reference, buyer, type, units, gross, net, postage, packaging,
+     * profit and tracking.
      */
     public function testIndexListsOrders(): void
     {
@@ -264,7 +265,13 @@ final class OrdersControllerTest extends TestCase
         $this->assertStringContainsString('<th class="text-end">Gross</th>', $body);
         $this->assertStringContainsString('£6.60', $first, 'Gross: sold price before fees.');
         $this->assertStringContainsString('£3.33', $first);
-        $this->assertStringContainsString('£0.80', $first, 'Profit: 3.33 − 0.90 − 1.55 − 0.08.');
+        $this->assertStringContainsString('<th class="text-end">Postage</th>', $body);
+        $this->assertStringContainsString('<th class="text-end">Packaging</th>', $body);
+        $this->assertMatchesRegularExpression(
+            '#£3\.33</td>\s*<td[^>]*>£1\.55</td>\s*<td[^>]*>£0\.08</td>\s*<td[^>]*>£0\.80</td>#',
+            $first,
+            'Net, postage, packaging, then profit: 3.33 − 0.90 − 1.55 − 0.08.'
+        );
         $this->assertStringContainsString('AB123GB', $first);
 
         $refund = $this->rowFor($body, '/orders/7"');

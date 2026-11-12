@@ -289,6 +289,8 @@ $kpis = [
                         <th class="text-end">Units</th>
                         <th class="text-end">Gross</th>
                         <th class="text-end">Net</th>
+                        <th class="text-end">Postage</th>
+                        <th class="text-end">Packaging</th>
                         <th class="text-end">Profit</th>
                         <th>Tracking</th>
                     </tr>
@@ -334,6 +336,8 @@ $kpis = [
                             </td>
                             <td class="text-end text-nowrap"><?php echo $pounds($order['gross']); ?></td>
                             <td class="text-end text-nowrap"><?php echo $pounds($order['net']); ?></td>
+                            <td class="text-end text-nowrap"><?php echo $pounds($order['postage']); ?></td>
+                            <td class="text-end text-nowrap"><?php echo $pounds($order['packaging']); ?></td>
                             <td class="text-end text-nowrap"><?php echo $pounds($order['profit']); ?></td>
                             <td class="text-nowrap">
                                 <?php if ($order['delivered']) : ?>
