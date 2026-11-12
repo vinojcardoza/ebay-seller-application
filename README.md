@@ -1,19 +1,19 @@
-# JRN Shop — eBay Seller Application
+# eBay Seller Application
 
 A back-office web application for running a small eBay shop. It keeps the product catalogue, stock purchases, orders and buyer feedback in one MariaDB database, imports orders, tracking and feedback directly from eBay's REST APIs, and reports sales, fees and profit.
 
 It is a lightweight PHP 8.5 MVC application assembled from PSR components rather than a full framework:
 
-| Concern | Library |
-| --- | --- |
-| Routing | [League Route](https://route.thephpleague.com/) |
-| Dependency injection | [PHP-DI](https://php-di.org/) |
-| Persistence | [Doctrine ORM](https://www.doctrine-project.org/) (attribute mapping) |
-| Templates | [League Plates](https://platesphp.com/) |
-| HTTP messages | Guzzle PSR-7, Nyholm PSR-17, HttpSoft SAPI emitter |
-| HTTP client (eBay) | Guzzle (PSR-18) |
-| Configuration | vlucas/phpdotenv |
-| Front end | Bootstrap 5.3, Tabler Icons, Inter (light and dark themes) |
+| Concern              | Library                                                               |
+| -------------------- | --------------------------------------------------------------------- |
+| Routing              | [League Route](https://route.thephpleague.com/)                       |
+| Dependency injection | [PHP-DI](https://php-di.org/)                                         |
+| Persistence          | [Doctrine ORM](https://www.doctrine-project.org/) (attribute mapping) |
+| Templates            | [League Plates](https://platesphp.com/)                               |
+| HTTP messages        | Guzzle PSR-7, Nyholm PSR-17, HttpSoft SAPI emitter                    |
+| HTTP client (eBay)   | Guzzle (PSR-18)                                                       |
+| Configuration        | vlucas/phpdotenv                                                      |
+| Front end            | Bootstrap 5.3, Tabler Icons, Inter (light and dark themes)            |
 
 ---
 
@@ -28,10 +28,10 @@ It is a lightweight PHP 8.5 MVC application assembled from PSR components rather
 - **Reports** — daily (last 30 days) and monthly (last 12 months) sales reports with summary figures, net sales charts and a monthly breakdown. Profit = sold price − fees − item cost × quantity − postage − packaging.
 - **Feedback** — buyer feedback summary, daily and monthly charts and a filterable list.
 - **eBay integration** (`/ebay`) — connect your seller account with OAuth 2.0 and:
-  - import recent orders (real eBay fees split across lines, FIFO item cost, optional promoted-listing fee),
-  - sync carrier, tracking number and shipped date,
-  - import new buyer feedback incrementally.
-  The app only reads from eBay; it never changes your listings or orders.
+    - import recent orders (real eBay fees split across lines, FIFO item cost, optional promoted-listing fee),
+    - sync carrier, tracking number and shipped date,
+    - import new buyer feedback incrementally.
+      The app only reads from eBay; it never changes your listings or orders.
 - **Authentication** — every page requires login; sessions use HttpOnly, SameSite=Lax cookies, regenerate on login and expire after 8 hours of inactivity. Users can change their own password.
 
 ---
@@ -58,20 +58,20 @@ All configuration is read from environment variables. Copy the example file and 
 cp .env.example .env
 ```
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `MARIADB_HOST` | yes | Database host. `mariadb` under Docker; e.g. `localhost` or your host's DB server otherwise. |
-| `MARIADB_DATABASE` | yes | Database name. |
-| `MARIADB_USER` | yes | Database user. |
-| `MARIADB_PASSWORD` | yes | Database password. |
-| `MARIADB_ROOT_PASSWORD` | Docker only | Root password for the MariaDB container. |
-| `EBAY_CLIENT_ID` | for eBay | App ID from the eBay developer portal. |
-| `EBAY_CLIENT_SECRET` | for eBay | Cert ID from the eBay developer portal. |
-| `EBAY_RU_NAME` | for eBay | RuName (eBay Redirect URL name). |
-| `EBAY_ENVIRONMENT` | | `production` (default) or `sandbox`. |
-| `EBAY_MARKETPLACE_ID` | | Marketplace, default `EBAY_GB`. |
-| `EBAY_SELLER_USERNAME` | for feedback | Your eBay username, used to import feedback. |
-| `EBAY_SCOPES` | | OAuth scopes, comma-separated with no spaces. Blank = `api_scope,sell.fulfillment.readonly,commerce.feedback`. |
+| Variable                | Required     | Description                                                                                                    |
+| ----------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| `MARIADB_HOST`          | yes          | Database host. `mariadb` under Docker; e.g. `localhost` or your host's DB server otherwise.                    |
+| `MARIADB_DATABASE`      | yes          | Database name.                                                                                                 |
+| `MARIADB_USER`          | yes          | Database user.                                                                                                 |
+| `MARIADB_PASSWORD`      | yes          | Database password.                                                                                             |
+| `MARIADB_ROOT_PASSWORD` | Docker only  | Root password for the MariaDB container.                                                                       |
+| `EBAY_CLIENT_ID`        | for eBay     | App ID from the eBay developer portal.                                                                         |
+| `EBAY_CLIENT_SECRET`    | for eBay     | Cert ID from the eBay developer portal.                                                                        |
+| `EBAY_RU_NAME`          | for eBay     | RuName (eBay Redirect URL name).                                                                               |
+| `EBAY_ENVIRONMENT`      |              | `production` (default) or `sandbox`.                                                                           |
+| `EBAY_MARKETPLACE_ID`   |              | Marketplace, default `EBAY_GB`.                                                                                |
+| `EBAY_SELLER_USERNAME`  | for feedback | Your eBay username, used to import feedback.                                                                   |
+| `EBAY_SCOPES`           |              | OAuth scopes, comma-separated with no spaces. Blank = `api_scope,sell.fulfillment.readonly,commerce.feedback`. |
 
 Notes:
 
@@ -85,12 +85,12 @@ Notes:
 
 The Compose stack runs four services:
 
-| Service | Purpose | URL |
-| --- | --- | --- |
-| `nginx` | Web server, document root `public/` | http://localhost:8181 |
-| `php` | PHP 8.5-FPM with Composer and Node.js | — |
-| `mariadb` | MariaDB 11 (data in the `business_app_mariadb_data` volume) | — |
-| `phpmyadmin` | Database admin UI | http://localhost:8182 |
+| Service      | Purpose                                                     | URL                   |
+| ------------ | ----------------------------------------------------------- | --------------------- |
+| `nginx`      | Web server, document root `public/`                         | http://localhost:8181 |
+| `php`        | PHP 8.5-FPM with Composer and Node.js                       | —                     |
+| `mariadb`    | MariaDB 11 (data in the `business_app_mariadb_data` volume) | —                     |
+| `phpmyadmin` | Database admin UI                                           | http://localhost:8182 |
 
 ### 1. Get the code and configure
 
@@ -125,9 +125,9 @@ Import `business_db_structure.sql` into the database, either:
 - **phpMyAdmin:** open http://localhost:8182, log in with your `MARIADB_USER` / `MARIADB_PASSWORD`, select the database and use **Import**; or
 - **command line:**
 
-  ```bash
-  docker compose exec -T mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < business_db_structure.sql
-  ```
+    ```bash
+    docker compose exec -T mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < business_db_structure.sql
+    ```
 
 If you have an existing data dump (e.g. from the legacy application), import that instead of — or after — the structure file. phpMyAdmin accepts uploads up to 300 MB.
 
@@ -234,8 +234,8 @@ Turn on an SSL certificate for the domain in your hosting panel (IONOS includes 
 
 1. Sign in at [developer.ebay.com](https://developer.ebay.com/) and create a **Production** (or Sandbox) keyset under **Application Keys**. Put the App ID in `EBAY_CLIENT_ID` and the Cert ID in `EBAY_CLIENT_SECRET`.
 2. Under **User Tokens → Get a Token from eBay via Your Application**, add a RuName (redirect URL name):
-   - **Auth accepted URL:** `https://<your-host>/ebay/callback`
-   - Put the RuName value in `EBAY_RU_NAME`.
+    - **Auth accepted URL:** `https://<your-host>/ebay/callback`
+    - Put the RuName value in `EBAY_RU_NAME`.
 3. Set `EBAY_SELLER_USERNAME` to your eBay username and check `EBAY_MARKETPLACE_ID` (e.g. `EBAY_GB`, `EBAY_US`).
 4. Restart so the new environment is picked up (`docker compose up -d` under Docker; nothing needed on shared hosting).
 5. In the app, open **eBay** (`/ebay`) and click **Connect**. Sign in to eBay and grant access; you are redirected back and the page shows the connection.
@@ -288,15 +288,15 @@ Request flow: `public/index.php` → `src/bootstrap.php` builds a PSR-7 request 
 
 ## Troubleshooting
 
-| Symptom | Fix |
-| --- | --- |
-| `One or more environment variables failed assertions: MARIADB_… is missing` | `.env` is missing or incomplete, or the server can't read it. |
-| `SQLSTATE[HY000] [2002]` connection refused | Wrong `MARIADB_HOST` (`mariadb` under Docker, your DB host otherwise), or the database container is still starting. |
-| `Table … doesn't exist` | Import `business_db_structure.sql`. |
-| 404 for every page except `/` on Apache | `mod_rewrite` is disabled or `.htaccess` overrides aren't allowed. |
-| Blank page / 500 | Check PHP is 8.5 and `vendor/` was uploaded; see the PHP error log (`docker compose logs php`). |
-| eBay connect fails to save the token | `var/` is not writable by the PHP user. |
-| `.env` dotenv parse error | Quote values that contain spaces. |
+| Symptom                                                                     | Fix                                                                                                                 |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `One or more environment variables failed assertions: MARIADB_… is missing` | `.env` is missing or incomplete, or the server can't read it.                                                       |
+| `SQLSTATE[HY000] [2002]` connection refused                                 | Wrong `MARIADB_HOST` (`mariadb` under Docker, your DB host otherwise), or the database container is still starting. |
+| `Table … doesn't exist`                                                     | Import `business_db_structure.sql`.                                                                                 |
+| 404 for every page except `/` on Apache                                     | `mod_rewrite` is disabled or `.htaccess` overrides aren't allowed.                                                  |
+| Blank page / 500                                                            | Check PHP is 8.5 and `vendor/` was uploaded; see the PHP error log (`docker compose logs php`).                     |
+| eBay connect fails to save the token                                        | `var/` is not writable by the PHP user.                                                                             |
+| `.env` dotenv parse error                                                   | Quote values that contain spaces.                                                                                   |
 
 ---
 
