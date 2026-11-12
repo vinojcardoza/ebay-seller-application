@@ -41,6 +41,26 @@ $pageUrl = static fn (int $number): string => '/orders?' . http_build_query(arra
 ));
 
 /**
+ * Filters, page and eBay period of this list, posted back by forms that return here.
+ */
+$listState = array_filter(
+    $filters + ['page' => $page > 1 ? $page : null, 'days' => $ebayDays],
+    static fn ($value): bool => $value !== null && $value !== ''
+);
+
+/**
+ * Orders on this page that tracking sync may update: eBay purchases not delivered yet.
+ */
+$syncIds = array_values(array_map(
+    static fn (array $order): int => $order['id'],
+    array_filter(
+        $orders,
+        static fn (array $order): bool => $order['platform'] === 'Ebay' && $order['type'] === 'Purchase'
+            && !$order['delivered']
+    )
+));
+
+/**
  * Badge class for how an eBay line's SKU matched.
  */
 $matchBadge = static fn (?string $match): string => match ($match) {
@@ -73,8 +93,14 @@ $kpis = [
 ?>
 <?php $this->start('actions') ?>
     <form method="post" action="/orders/sync-tracking"
-          title="Carrier, tracking number, shipped and delivered dates for eBay orders from the last <?php echo $ebay['trackingDays']; ?> days that are not delivered">
-        <button type="submit" class="btn btn-light-primary" <?php echo $ebay['connected'] ? '' : 'disabled'; ?>>
+          title="Carrier, tracking number, shipped and delivered dates for the eBay orders on this page from the last <?php echo $ebay['trackingDays']; ?> days that are not delivered">
+        <?php foreach ($listState as $name => $value) : ?>
+            <input type="hidden" name="<?php echo $this->e($name); ?>" value="<?php echo $this->e((string) $value); ?>">
+        <?php endforeach; ?>
+        <?php foreach ($syncIds as $id) : ?>
+            <input type="hidden" name="ids[]" value="<?php echo $id; ?>">
+        <?php endforeach; ?>
+        <button type="submit" class="btn btn-light-primary" <?php echo $ebay['connected'] && $syncIds !== [] ? '' : 'disabled'; ?>>
             <i class="ti ti-truck-delivery" aria-hidden="true"></i> Sync tracking
         </button>
     </form>

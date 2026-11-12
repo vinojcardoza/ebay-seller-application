@@ -104,6 +104,11 @@ class OrdersController extends ControllerAbstract
     ];
 
     /**
+     * Orders list query parameters (filters, page, eBay period) that tracking sync posts back to return to.
+     */
+    private const LIST_PARAMS = ['q', 'platform', 'type', 'from', 'to', 'tracking', 'page', 'days'];
+
+    /**
      * Success messages for `?done=` codes set by redirects.
      */
     private const NOTICES = [
@@ -176,16 +181,25 @@ class OrdersController extends ControllerAbstract
     }
 
     /**
-     * Fetch tracking and delivery from eBay for eBay orders from the last 30 days that are not delivered.
+     * Fetch tracking and delivery from eBay for the posted orders (those on the current list page) that are
+     * eBay purchases from the last 30 days and not delivered, then return to that page with its filters.
      */
     public function syncTracking(ServerRequestInterface $request): ResponseInterface
     {
+        $body = $request->getParsedBody();
+        $ids = is_array($body) && is_array($body['ids'] ?? null) ? $body['ids'] : [];
+        $orderIds = array_values(array_unique(array_map(
+            'intval',
+            array_filter($ids, static fn ($id): bool => is_string($id) && ctype_digit($id))
+        )));
+        $list = $this->listQuery($request);
+
         try {
-            $result = $this->tracking->sync();
+            $result = $this->tracking->sync($orderIds);
         } catch (EbayNotConnectedException) {
-            return $this->redirect('/orders?error=not-connected');
+            return $this->redirect('/orders?' . http_build_query(['error' => 'not-connected'] + $list));
         } catch (EbayException $e) {
-            return $this->renderIndex($request, $e->getMessage(), 502);
+            return $this->renderIndex($request->withQueryParams($list), $e->getMessage(), 502);
         }
 
         return $this->redirect('/orders?' . http_build_query([
@@ -194,7 +208,27 @@ class OrdersController extends ControllerAbstract
             'updated' => $result['updated'],
             'delivered' => $result['delivered'],
             'failed' => count($result['failed']),
-        ] + ($result['deliveryError'] !== null ? ['nodelivery' => 1] : [])));
+        ] + ($result['deliveryError'] !== null ? ['nodelivery' => 1] : []) + $list));
+    }
+
+    /**
+     * The orders list state (filters, page, eBay period) posted with a form, to return to that list page.
+     *
+     * @return array<string, string> Non-empty values of LIST_PARAMS (validated again when the list renders).
+     */
+    private function listQuery(ServerRequestInterface $request): array
+    {
+        $list = [];
+
+        foreach (self::LIST_PARAMS as $name) {
+            $value = mb_substr($this->field($request, $name), 0, 100);
+
+            if ($value !== '') {
+                $list[$name] = $value;
+            }
+        }
+
+        return $list;
     }
 
     /**

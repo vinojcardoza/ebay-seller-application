@@ -142,7 +142,7 @@ final class TrackingSynchroniserTest extends TestCase
         ]];
         $this->em->expects($this->once())->method('flush');
 
-        $result = $this->synchroniser->sync();
+        $result = $this->synchroniser->sync($this->orderIds());
 
         $this->assertSame($this->syncResult(1, 1), $result);
         $this->assertSame('AB123456789GB', $order->getTrackingCode());
@@ -180,7 +180,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'T1', 'shippingCarrierCode' => $code]];
         $this->em->expects($this->once())->method('flush');
 
-        $this->synchroniser->sync();
+        $this->synchroniser->sync($this->orderIds());
 
         $this->assertSame($name, $order->getShippingCompany());
     }
@@ -196,7 +196,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->fulfillments['12-2'] = [];
         $this->em->expects($this->once())->method('flush');
 
-        $result = $this->synchroniser->sync();
+        $result = $this->synchroniser->sync($this->orderIds());
 
         $this->assertSame($this->syncResult(2, 1), $result);
         $this->assertSame('SECOND', $shipped->getTrackingCode());
@@ -215,7 +215,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'T1']];
         $this->em->expects($this->once())->method('flush');
 
-        $result = $this->synchroniser->sync();
+        $result = $this->synchroniser->sync($this->orderIds());
 
         $this->assertSame($this->syncResult(2, 1, failed: ['06-old']), $result);
         $this->assertSame('T1', $ok->getTrackingCode());
@@ -229,7 +229,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->order('12-1');
         $this->em->expects($this->never())->method('flush');
 
-        $this->assertSame($this->syncResult(1, 0), $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 0), $this->synchroniser->sync($this->orderIds()));
     }
 
     /**
@@ -248,7 +248,7 @@ final class TrackingSynchroniserTest extends TestCase
         ]];
         $this->em->expects($this->never())->method('flush');
 
-        $this->assertSame($this->syncResult(1, 0), $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 0), $this->synchroniser->sync($this->orderIds()));
         $this->assertSame('T1', $order->getTrackingCode());
     }
 
@@ -261,7 +261,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'NEW']];
         $this->em->expects($this->once())->method('flush');
 
-        $this->assertSame($this->syncResult(1, 1), $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 1), $this->synchroniser->sync($this->orderIds()));
         $this->assertSame('NEW', $order->getTrackingCode());
     }
 
@@ -276,7 +276,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->deliveries = ['12-1' => new \DateTimeImmutable('2026-11-10T09:30:00.000Z')];
         $this->em->expects($this->once())->method('flush');
 
-        $result = $this->synchroniser->sync();
+        $result = $this->synchroniser->sync($this->orderIds());
 
         $this->assertSame($this->syncResult(2, 1, delivered: 1), $result);
         $this->assertSame([['12-1', '12-2']], $this->deliveryLookups, 'One lookup for all checked orders.');
@@ -297,7 +297,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->deliveries = ['12-1' => new \DateTimeImmutable('2026-11-10T09:30:00Z')];
         $this->em->expects($this->once())->method('flush');
 
-        $this->assertSame($this->syncResult(1, 1, delivered: 1), $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 1, delivered: 1), $this->synchroniser->sync($this->orderIds()));
         $this->assertSame('T1', $order->getTrackingCode());
         $this->assertNotNull($order->getShippingDeliveryDatetime());
     }
@@ -312,7 +312,10 @@ final class TrackingSynchroniserTest extends TestCase
         $this->deliveries = ['12-1' => new \DateTimeImmutable('2026-11-10T09:30:00Z')];
         $this->em->expects($this->once())->method('flush');
 
-        $this->assertSame($this->syncResult(1, 1, delivered: 1, failed: ['12-1']), $this->synchroniser->sync());
+        $this->assertSame(
+            $this->syncResult(1, 1, delivered: 1, failed: ['12-1']),
+            $this->synchroniser->sync($this->orderIds())
+        );
         $this->assertNotNull($order->getShippingDeliveryDatetime());
     }
 
@@ -328,7 +331,7 @@ final class TrackingSynchroniserTest extends TestCase
 
         $this->assertSame(
             $this->syncResult(1, 1, deliveryError: 'GetOrders failed'),
-            $this->synchroniser->sync()
+            $this->synchroniser->sync($this->orderIds())
         );
         $this->assertSame('T1', $order->getTrackingCode());
         $this->assertNull($order->getShippingDeliveryDatetime());
@@ -341,22 +344,36 @@ final class TrackingSynchroniserTest extends TestCase
     {
         $this->em->expects($this->never())->method('flush');
 
-        $this->assertSame($this->syncResult(0, 0), $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(0, 0), $this->synchroniser->sync([99]));
         $this->assertSame([], $this->deliveryLookups);
     }
 
     /**
-     * Only eBay purchases from the last 30 days that are not delivered are queried,
-     * with or without tracking, newest first, up to the limit.
+     * Without order IDs (e.g. no undelivered eBay orders on the page) nothing is queried or sent to eBay.
+     */
+    public function testNoOrderIdsQueriesNothing(): void
+    {
+        $this->em->expects($this->never())->method('getRepository');
+        $this->em->expects($this->never())->method('flush');
+        $this->order('12-1');
+
+        $this->assertSame($this->syncResult(0, 0), $this->synchroniser->sync([0, -3]));
+        $this->assertNull($this->criteria);
+        $this->assertSame([], $this->deliveryLookups);
+    }
+
+    /**
+     * Only the given orders that are eBay purchases from the last 30 days and not delivered are
+     * queried, with or without tracking, newest first, limited to the number of IDs.
      */
     public function testQueryCriteria(): void
     {
         $this->em->expects($this->never())->method('flush');
 
-        $this->synchroniser->sync(25);
+        $this->synchroniser->sync([1, 2, 3, 4, 5, 6, 7, 8, 2]);
 
         $this->assertNotNull($this->criteria);
-        $this->assertSame(25, $this->criteria->getMaxResults());
+        $this->assertSame(8, $this->criteria->getMaxResults());
         $this->assertSame(['orderDate' => SortDirection::Descending], $this->criteria->getOrderings());
 
         $where = $this->criteria->getWhereExpression();
@@ -373,9 +390,10 @@ final class TrackingSynchroniserTest extends TestCase
         $this->assertFalse($matches($this->order('g', new \DateTime('2026-10-11 11:59:00 UTC'))), 'Older.');
         $this->assertFalse($matches(
             $this->order('h', $recent)->setTrackingCode('T1')->setShippingDeliveryDatetime(new \DateTime('2026-11-03'))
-        ));
+        ), 'Delivered.');
         $this->assertFalse($matches($this->order('e', $recent)->setPlatform('Etsy')));
         $this->assertFalse($matches($this->order('f', $recent)->setOrderType('Refund')));
+        $this->assertFalse($matches($this->order('i', $recent)), 'Not one of the given orders (ID 9).');
     }
 
     /**
@@ -427,10 +445,21 @@ final class TrackingSynchroniserTest extends TestCase
             ->setOrderType('Purchase')
             ->setOrderReference($reference)
             ->setOrderDate($date ?? new \DateTime('2026-11-08 10:00:00 UTC'));
+        (new \ReflectionProperty(Order::class, 'id'))->setValue($order, count($this->orders) + 1);
 
         $this->orders[] = $order;
 
         return $order;
+    }
+
+    /**
+     * IDs of the orders created so far (1, 2, ...).
+     *
+     * @return list<int>
+     */
+    private function orderIds(): array
+    {
+        return array_map(static fn (Order $order): int => $order->getId(), $this->orders);
     }
 
     /**

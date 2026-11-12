@@ -854,7 +854,7 @@ final class OrdersControllerTest extends TestCase
 
         $this->assertStringContainsString('<a href="/ebay">Connect your eBay account</a>', $body);
         $this->assertMatchesRegularExpression(
-            '#action="/orders/sync-tracking"[^>]*>\s*<button[^>]*disabled>#',
+            '#action="/orders/sync-tracking"[^>]*>(?:\s*<input[^>]*>)*\s*<button[^>]*disabled>#',
             $body
         );
     }
@@ -892,7 +892,8 @@ final class OrdersControllerTest extends TestCase
             'The filter form keeps the eBay period.'
         );
         $this->assertMatchesRegularExpression(
-            '#action="/orders/sync-tracking"[^>]*>\s*<button type="submit" class="btn btn-light-primary" >#',
+            '#action="/orders/sync-tracking"[^>]*>(?:\s*<input[^>]*>)*'
+            . '\s*<button type="submit" class="btn btn-light-primary" >#',
             $body
         );
     }
@@ -1052,17 +1053,39 @@ final class OrdersControllerTest extends TestCase
     }
 
     /**
-     * Tracking sync redirects with the counts, including orders now delivered.
+     * Tracking sync sends only the posted (current page) order IDs and returns to that page with the counts.
      */
     public function testSyncTracking(): void
     {
-        $this->tracking->method('sync')->willReturn(
+        $this->trackingMock()->expects($this->once())->method('sync')->with([5, 9])->willReturn(
             ['checked' => 4, 'updated' => 2, 'delivered' => 1, 'failed' => ['06-1'], 'deliveryError' => null]
         );
 
         $this->assertRedirect(
-            '/orders?done=tracking&checked=4&updated=2&delivered=1&failed=1',
-            $this->controller->syncTracking($this->post([]))
+            '/orders?done=tracking&checked=4&updated=2&delivered=1&failed=1&platform=Ebay&page=3&days=7',
+            $this->controller->syncTracking($this->post([
+                'ids' => ['5', '9', '5', 'x', ['1']],
+                'platform' => 'Ebay',
+                'q' => '  ',
+                'page' => '3',
+                'days' => '7',
+                'unknown' => 'dropped',
+            ]))
+        );
+    }
+
+    /**
+     * Tracking sync without posted IDs passes none to the synchroniser (which then calls eBay for nothing).
+     */
+    public function testSyncTrackingWithoutIds(): void
+    {
+        $this->trackingMock()->expects($this->once())->method('sync')->with([])->willReturn(
+            ['checked' => 0, 'updated' => 0, 'delivered' => 0, 'failed' => [], 'deliveryError' => null]
+        );
+
+        $this->assertRedirect(
+            '/orders?done=tracking&checked=0&updated=0&delivered=0&failed=0',
+            $this->controller->syncTracking($this->post(['ids' => 'not-a-list']))
         );
     }
 
@@ -1077,31 +1100,70 @@ final class OrdersControllerTest extends TestCase
 
         $this->assertRedirect(
             '/orders?done=tracking&checked=4&updated=2&delivered=0&failed=0&nodelivery=1',
-            $this->controller->syncTracking($this->post([]))
+            $this->controller->syncTracking($this->post(['ids' => ['5']]))
         );
     }
 
     /**
-     * Tracking sync asks to connect when eBay is not connected.
+     * Tracking sync asks to connect when eBay is not connected, keeping the list page.
      */
     public function testSyncTrackingNotConnected(): void
     {
         $this->tracking->method('sync')->willThrowException(new EbayNotConnectedException('x'));
 
-        $this->assertRedirect('/orders?error=not-connected', $this->controller->syncTracking($this->post([])));
+        $this->assertRedirect(
+            '/orders?error=not-connected&page=2',
+            $this->controller->syncTracking($this->post(['ids' => ['5'], 'page' => '2']))
+        );
     }
 
     /**
-     * Tracking sync shows eBay errors on the orders page with a 502.
+     * Tracking sync shows eBay errors on the same list page with a 502.
      */
     public function testSyncTrackingApiError(): void
     {
         $this->tracking->method('sync')->willThrowException(new EbayApiException('eBay is down', 503));
 
-        $response = $this->controller->syncTracking($this->post([]));
+        $response = $this->controller->syncTracking($this->post(['ids' => ['5'], 'platform' => 'Ebay']));
 
         $this->assertSame(502, $response->getStatusCode());
         $this->assertStringContainsString('eBay is down', $this->body($response));
+        $this->assertStringContainsString('<option value="Ebay" selected', $this->body($response));
+    }
+
+    /**
+     * The Sync tracking form posts only the page's undelivered eBay purchases and the list state.
+     */
+    public function testSyncTrackingFormPostsPageOrders(): void
+    {
+        $this->ebayOrders->method('isConnected')->willReturn(true);
+
+        $body = $this->body($this->controller->index($this->get(['platform' => 'Ebay', 'days' => '7'])));
+        $form = substr($body, (int) strpos($body, 'action="/orders/sync-tracking"'));
+        $form = substr($form, 0, (int) strpos($form, '</form>'));
+
+        $this->assertStringContainsString('<input type="hidden" name="ids[]" value="5">', $form);
+        $this->assertStringNotContainsString('name="ids[]" value="7"', $form, 'Delivered refund.');
+        $this->assertStringContainsString('<input type="hidden" name="platform" value="Ebay">', $form);
+        $this->assertStringContainsString('<input type="hidden" name="days" value="7">', $form);
+        $this->assertStringNotContainsString('disabled', $form);
+    }
+
+    /**
+     * Sync tracking is disabled when no order on the page is an undelivered eBay purchase.
+     */
+    public function testSyncTrackingDisabledWithoutPageOrders(): void
+    {
+        $this->ebayOrders->method('isConnected')->willReturn(true);
+        $this->listRows[0]['shipping_delivery_datetime'] = '2026-11-10 09:00:00';
+
+        $body = $this->body($this->controller->index($this->get()));
+
+        $this->assertStringNotContainsString('name="ids[]"', $body);
+        $this->assertMatchesRegularExpression(
+            '#action="/orders/sync-tracking"[^>]*>(?:\s*<input[^>]*>)*\s*<button[^>]*disabled>#',
+            $body
+        );
     }
 
     // ---------- helpers ----------
@@ -1117,6 +1179,18 @@ final class OrdersControllerTest extends TestCase
 
         $mock = $this->createMock(RecentOrders::class);
         $this->ebayOrders = $mock;
+        $this->controller = ($this->build)();
+
+        return $mock;
+    }
+
+    /**
+     * Replace the tracking synchroniser stub with a mock (rebuilding the controller) so the test can set expectations.
+     */
+    private function trackingMock(): TrackingSynchroniser&MockObject
+    {
+        $mock = $this->createMock(TrackingSynchroniser::class);
+        $this->tracking = $mock;
         $this->controller = ($this->build)();
 
         return $mock;
@@ -1367,7 +1441,7 @@ final class OrdersControllerTest extends TestCase
     /**
      * Build a POST request with form fields.
      *
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields Fields as PHP parses them (lists such as `ids[]` are arrays).
      */
     private function post(array $fields): ServerRequest
     {

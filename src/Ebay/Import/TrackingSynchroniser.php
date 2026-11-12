@@ -18,9 +18,10 @@ use Exception;
 use SortDirection;
 
 /**
- * Copies shipment tracking and delivery from eBay onto recent imported eBay
- * orders that are not delivered yet (no delivery date), so tracking added or
- * changed on eBay after an earlier sync is picked up too.
+ * Copies shipment tracking and delivery from eBay onto the given imported eBay
+ * orders (e.g. those on the current orders page) that are recent and not
+ * delivered yet (no delivery date), so tracking added or changed on eBay after
+ * an earlier sync is picked up too.
  *
  * Replaces the legacy "get order tracking" action. The carrier, tracking number
  * and shipped date come from the REST Fulfillment API; it has no delivery date,
@@ -63,28 +64,36 @@ class TrackingSynchroniser
     }
 
     /**
-     * Fetch tracking and delivery for eBay orders from the last LOOKBACK_DAYS days that are not delivered.
+     * Fetch tracking and delivery for the given orders that are eBay purchases from the last
+     * LOOKBACK_DAYS days and not delivered; other orders (including delivered ones) are not sent to eBay.
      *
-     * @param int $limit Most orders to check in one run (one tracking API call each, plus one delivery call).
+     * @param list<int> $orderIds Orders to consider (one tracking API call each, plus one delivery call).
      *
      * @return array{checked: int, updated: int, delivered: int, failed: list<string>, deliveryError: ?string}
      *     `updated` counts orders whose tracking or delivery changed; `delivered` those now marked delivered;
      *     `failed` lists order references whose tracking lookup failed; `deliveryError` is set when the
      *     delivery lookup failed (tracking is still saved).
      */
-    public function sync(int $limit = 50): array
+    public function sync(array $orderIds): array
     {
+        $result = ['checked' => 0, 'updated' => 0, 'delivered' => 0, 'failed' => [], 'deliveryError' => null];
+        $orderIds = array_values(array_unique(array_filter($orderIds, static fn (int $id): bool => $id > 0)));
+
+        if ($orderIds === []) {
+            return $result;
+        }
+
         $since = DateTime::createFromImmutable($this->clock->now()->modify('-' . self::LOOKBACK_DAYS . ' days'));
         $criteria = Criteria::create()
-            ->where(Criteria::expr()->eq('platform', 'Ebay'))
+            ->where(Criteria::expr()->in('id', $orderIds))
+            ->andWhere(Criteria::expr()->eq('platform', 'Ebay'))
             ->andWhere(Criteria::expr()->eq('orderType', 'Purchase'))
             ->andWhere(Criteria::expr()->isNull('shippingDeliveryDatetime'))
             ->andWhere(Criteria::expr()->gte('orderDate', $since))
             ->orderBy(['orderDate' => SortDirection::Descending])
-            ->setMaxResults(max(1, $limit));
+            ->setMaxResults(count($orderIds));
 
         $orders = $this->em->getRepository(Order::class)->matching($criteria);
-        $result = ['checked' => 0, 'updated' => 0, 'delivered' => 0, 'failed' => [], 'deliveryError' => null];
         $changed = [];
 
         foreach ($orders as $order) {
