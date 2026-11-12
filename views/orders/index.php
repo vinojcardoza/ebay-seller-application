@@ -1,11 +1,12 @@
 <?php
 
 /**
- * View: Orders list with filters, totals and pagination.
+ * View: Orders list with filters, totals and pagination, followed by recent
+ * eBay orders that are not imported yet.
  *
  * @var \League\Plates\Template\Template $this
  * @var list<array<string, mixed>> $orders Current page rows (id, reference, date, platform, type,
- *     name, ebayUser, tracking, delivered, items, units, net, profit, and products: a list of
+ *     name, ebayUser, tracking, delivered, items, units, gross (sold price before fees), net, profit, and products: a list of
  *     {title, sku, quantity, cost} for each item line, cost being the unit item cost).
  * @var array{orders: int, net: string, cost: string, shipping: string, profit: string} $summary
  * @var int $total Orders matching the filters.
@@ -16,19 +17,37 @@
  * @var list<string> $types
  * @var array<string, string> $trackingFilters
  * @var string|null $notice
+ * @var string|null $error Error message for the last action.
+ * @var array{connected: bool, previews: list<\App\Ebay\Import\ImportPreview>, error: string|null,
+ *     days: int, dayOptions: list<int>, trackingDays: int} $ebay Recent eBay orders not imported yet.
  */
+
+use App\Ebay\Import\ImportPreview;
+use App\Ebay\Import\RecentOrders;
 
 $this->layout('layout', ['title' => 'Orders', 'breadcrumbs' => ['Orders' => null]]);
 
 $filtered = implode('', $filters) !== '';
 
+// The eBay look-back period is kept in links and forms only when it is not the default.
+$ebayDays = $ebay['days'] !== RecentOrders::DEFAULT_DAYS ? $ebay['days'] : null;
+
 /**
  * URL of this page with the current filters and the given page number.
  */
 $pageUrl = static fn (int $number): string => '/orders?' . http_build_query(array_filter(
-    $filters + ['page' => $number > 1 ? $number : null],
+    $filters + ['page' => $number > 1 ? $number : null, 'days' => $ebayDays],
     static fn ($value): bool => $value !== null && $value !== ''
 ));
+
+/**
+ * Badge class for how an eBay line's SKU matched.
+ */
+$matchBadge = static fn (?string $match): string => match ($match) {
+    ImportPreview::MATCH_PRODUCT => 'tint-success',
+    ImportPreview::MATCH_CUSTOM_SKU => 'tint-info',
+    default => 'tint-danger',
+};
 
 /**
  * Badge class for an order type.
@@ -53,11 +72,20 @@ $kpis = [
 ];
 ?>
 <?php $this->start('actions') ?>
+    <form method="post" action="/orders/sync-tracking"
+          title="Carrier, tracking number and shipped date for eBay orders from the last <?php echo $ebay['trackingDays']; ?> days that are not delivered">
+        <button type="submit" class="btn btn-light-primary" <?php echo $ebay['connected'] ? '' : 'disabled'; ?>>
+            <i class="ti ti-truck-delivery" aria-hidden="true"></i> Sync tracking
+        </button>
+    </form>
     <a class="btn btn-primary" href="/orders/create"><i class="ti ti-plus" aria-hidden="true"></i> Add order</a>
 <?php $this->stop() ?>
 
 <?php if ($notice !== null) : ?>
     <div class="alert alert-success" role="status"><?php echo $this->e($notice); ?></div>
+<?php endif; ?>
+<?php if ($error !== null) : ?>
+    <div class="alert alert-danger" role="alert"><?php echo $this->e($error); ?></div>
 <?php endif; ?>
 
 <div class="row">
@@ -76,6 +104,112 @@ $kpis = [
             </div>
         </div>
     <?php endforeach; ?>
+</div>
+
+<div class="card" id="ebay-orders">
+    <div class="card-header">
+        <h2>eBay orders not imported</h2>
+        <form method="get" action="/orders#ebay-orders" class="d-flex align-items-center gap-2">
+            <?php foreach (array_filter($filters, static fn (string $value): bool => $value !== '') as $name => $value) : ?>
+                <input type="hidden" name="<?php echo $this->e($name); ?>" value="<?php echo $this->e($value); ?>">
+            <?php endforeach; ?>
+            <?php if ($page > 1) : ?>
+                <input type="hidden" name="page" value="<?php echo $page; ?>">
+            <?php endif; ?>
+            <label class="small text-nowrap" for="days">Created in the last</label>
+            <select class="form-select form-select-sm" id="days" name="days" style="min-width: 7.5rem"
+                    onchange="this.form.submit()">
+                <?php foreach ($ebay['dayOptions'] as $option) : ?>
+                    <option value="<?php echo $option; ?>" <?php echo $option === $ebay['days'] ? 'selected' : ''; ?>>
+                        <?php echo $option; ?> day<?php echo $option === 1 ? '' : 's'; ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <noscript><button type="submit" class="btn btn-sm btn-light-secondary">Show</button></noscript>
+        </form>
+    </div>
+
+    <?php if (!$ebay['connected']) : ?>
+        <div class="empty-state">
+            <i class="ti ti-plug-connected-x" aria-hidden="true"></i>
+            <span><a href="/ebay">Connect your eBay account</a> to see recent eBay orders.</span>
+        </div>
+    <?php elseif ($ebay['error'] !== null) : ?>
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert"><?php echo $this->e($ebay['error']); ?></div>
+        </div>
+    <?php elseif ($ebay['previews'] === []) : ?>
+        <div class="empty-state">
+            <i class="ti ti-circle-check" aria-hidden="true"></i>
+            Every eBay order from the last <?php echo $ebay['days']; ?> day<?php echo $ebay['days'] === 1 ? '' : 's'; ?> is imported.
+        </div>
+    <?php else : ?>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Buyer</th>
+                        <th>Items</th>
+                        <th class="text-end">Total</th>
+                        <th>Status</th>
+                        <th class="text-end">Import</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach (array_reverse($ebay['previews'], true) as $preview) : ?>
+                        <tr>
+                            <td class="text-nowrap">
+                                <?php echo $this->e($preview->orderId); ?>
+                                <?php if ($preview->created !== null) : ?>
+                                    <div class="small text-body-secondary">
+                                        <?php echo $preview->created->format('d M Y H:i'); ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo $this->e($preview->buyer !== '' ? $preview->buyer : '—'); ?></td>
+                            <td>
+                                <?php foreach ($preview->lines as $line) : ?>
+                                    <div>
+                                        <span class="badge <?php echo $matchBadge($line['match']); ?>">
+                                            <?php echo $this->e($line['sku'] !== '' ? $line['sku'] : 'No SKU'); ?>
+                                        </span>
+                                        × <?php echo $line['quantity']; ?>
+                                        <span class="small text-body-secondary"><?php echo $this->e($line['title']); ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <?php echo $this->e($preview->currency === 'GBP' ? '£' : $preview->currency . ' '); ?><?php echo $this->e($preview->total); ?>
+                            </td>
+                            <td>
+                                <?php if ($preview->canImport()) : ?>
+                                    <span class="badge tint-success">Ready</span>
+                                <?php else : ?>
+                                    <span class="badge tint-danger">Needs attention</span>
+                                    <div class="small text-body-secondary"><?php echo $this->e(implode(' ', $preview->problems())); ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td class="text-end">
+                                <?php if ($preview->canImport()) : ?>
+                                    <form method="post" action="/orders/ebay/<?php echo $this->e(rawurlencode($preview->orderId)); ?>"
+                                          class="d-inline-flex align-items-center gap-2">
+                                        <input type="hidden" name="days" value="<?php echo $ebay['days']; ?>">
+                                        <label class="small text-nowrap">
+                                            <input type="checkbox" name="promoted" value="1"> Promoted
+                                        </label>
+                                        <button type="submit" class="btn btn-sm btn-primary">
+                                            <i class="ti ti-download" aria-hidden="true"></i> Import
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
 </div>
 
 <div class="card">
@@ -126,6 +260,9 @@ $kpis = [
                 <input class="form-control" type="date" id="to" name="to" value="<?php echo $this->e($filters['to']); ?>">
             </div>
             <div class="col-auto d-flex gap-2">
+                <?php if ($ebayDays !== null) : ?>
+                    <input type="hidden" name="days" value="<?php echo $ebayDays; ?>">
+                <?php endif; ?>
                 <button type="submit" class="btn btn-light-primary"><i class="ti ti-filter" aria-hidden="true"></i> Filter</button>
                 <?php if ($filtered) : ?>
                     <a class="btn btn-light-secondary" href="/orders">Clear</a>
@@ -150,6 +287,7 @@ $kpis = [
                         <th>Type</th>
                         <th>Products</th>
                         <th class="text-end">Units</th>
+                        <th class="text-end">Gross</th>
                         <th class="text-end">Net</th>
                         <th class="text-end">Profit</th>
                         <th>Tracking</th>
@@ -194,6 +332,7 @@ $kpis = [
                                     <?php echo $order['units']; ?>
                                 <?php endif; ?>
                             </td>
+                            <td class="text-end text-nowrap"><?php echo $pounds($order['gross']); ?></td>
                             <td class="text-end text-nowrap"><?php echo $pounds($order['net']); ?></td>
                             <td class="text-end text-nowrap"><?php echo $pounds($order['profit']); ?></td>
                             <td class="text-nowrap">

@@ -200,7 +200,41 @@ final class TrackingSynchroniserTest extends TestCase
     }
 
     /**
-     * Only recent eBay purchases without tracking (NULL or empty) are queried, newest first, up to the limit.
+     * Orders that already have the same tracking are checked but not counted as updated.
+     */
+    public function testUnchangedTrackingIsNotCounted(): void
+    {
+        $order = $this->order('12-1')
+            ->setTrackingCode('T1')
+            ->setShippingCompany('Royal Mail')
+            ->setShippingDatetime(new \DateTime('2026-11-09 16:05:00 UTC'));
+        $this->fulfillments['12-1'] = [[
+            'shipmentTrackingNumber' => 'T1',
+            'shippingCarrierCode' => 'RoyalMail',
+            'shippedDate' => '2026-11-09T16:05:00.000Z',
+        ]];
+        $this->em->expects($this->never())->method('flush');
+
+        $this->assertSame(['checked' => 1, 'updated' => 0, 'failed' => []], $this->synchroniser->sync());
+        $this->assertSame('T1', $order->getTrackingCode());
+    }
+
+    /**
+     * A tracking number changed on eBay since the last sync replaces the stored one.
+     */
+    public function testChangedTrackingIsUpdated(): void
+    {
+        $order = $this->order('12-1')->setTrackingCode('OLD');
+        $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'NEW']];
+        $this->em->expects($this->once())->method('flush');
+
+        $this->assertSame(['checked' => 1, 'updated' => 1, 'failed' => []], $this->synchroniser->sync());
+        $this->assertSame('NEW', $order->getTrackingCode());
+    }
+
+    /**
+     * Only eBay purchases from the last 30 days that are not delivered are queried,
+     * with or without tracking, newest first, up to the limit.
      */
     public function testQueryCriteria(): void
     {
@@ -221,8 +255,12 @@ final class TrackingSynchroniserTest extends TestCase
         $recent = new \DateTime('2026-11-01 10:00:00 UTC');
         $this->assertTrue($matches($this->order('a', $recent)));
         $this->assertTrue($matches($this->order('b', $recent)->setTrackingCode('')));
-        $this->assertFalse($matches($this->order('c', $recent)->setTrackingCode('T1')));
-        $this->assertFalse($matches($this->order('d', new \DateTime('2026-08-01 10:00:00 UTC'))));
+        $this->assertTrue($matches($this->order('c', $recent)->setTrackingCode('T1')));
+        $this->assertTrue($matches($this->order('d', new \DateTime('2026-10-11 12:00:00 UTC'))), '30 days ago.');
+        $this->assertFalse($matches($this->order('g', new \DateTime('2026-10-11 11:59:00 UTC'))), 'Older.');
+        $this->assertFalse($matches(
+            $this->order('h', $recent)->setTrackingCode('T1')->setShippingDeliveryDatetime(new \DateTime('2026-11-03'))
+        ));
         $this->assertFalse($matches($this->order('e', $recent)->setPlatform('Etsy')));
         $this->assertFalse($matches($this->order('f', $recent)->setOrderType('Refund')));
     }
@@ -267,7 +305,7 @@ final class TrackingSynchroniserTest extends TestCase
     }
 
     /**
-     * Add an eBay purchase without tracking to the fake query result.
+     * Add an undelivered eBay purchase without tracking to the fake query result.
      */
     private function order(string $reference, ?\DateTime $date = null): Order
     {

@@ -17,8 +17,9 @@ use Exception;
 use SortDirection;
 
 /**
- * Copies shipment tracking from eBay onto imported eBay orders that have none yet
- * (tracking code NULL or empty — the legacy app stored both).
+ * Copies shipment tracking from eBay onto recent imported eBay orders that are
+ * not delivered yet (no delivery date), so tracking added or changed on eBay
+ * after an earlier sync is picked up too.
  *
  * Replaces the legacy "get order tracking" action. eBay's REST Fulfillment API
  * reports the carrier, tracking number and shipped date, but not the actual
@@ -29,7 +30,7 @@ class TrackingSynchroniser
     /**
      * Only orders this many days old or newer are checked.
      */
-    public const LOOKBACK_DAYS = 90;
+    public const LOOKBACK_DAYS = 30;
 
     /**
      * Display names for eBay carrier codes, matching names already stored by the legacy app.
@@ -58,12 +59,12 @@ class TrackingSynchroniser
     }
 
     /**
-     * Fetch tracking for recent eBay orders without a tracking code.
+     * Fetch tracking for eBay orders from the last LOOKBACK_DAYS days that are not delivered.
      *
      * @param int $limit Most orders to check in one run (one API call each).
      *
      * @return array{checked: int, updated: int, failed: list<string>}
-     *     `failed` lists order references whose lookup failed.
+     *     `updated` counts orders whose tracking changed; `failed` lists order references whose lookup failed.
      */
     public function sync(int $limit = 50): array
     {
@@ -71,10 +72,7 @@ class TrackingSynchroniser
         $criteria = Criteria::create()
             ->where(Criteria::expr()->eq('platform', 'Ebay'))
             ->andWhere(Criteria::expr()->eq('orderType', 'Purchase'))
-            ->andWhere(Criteria::expr()->orX(
-                Criteria::expr()->isNull('trackingCode'),
-                Criteria::expr()->eq('trackingCode', '')
-            ))
+            ->andWhere(Criteria::expr()->isNull('shippingDeliveryDatetime'))
             ->andWhere(Criteria::expr()->gte('orderDate', $since))
             ->orderBy(['orderDate' => SortDirection::Descending])
             ->setMaxResults(max(1, $limit));
@@ -109,7 +107,7 @@ class TrackingSynchroniser
      *
      * @param list<array<string, mixed>> $fulfillments
      *
-     * @return bool Whether the order changed.
+     * @return bool Whether any of the order's values changed.
      */
     private function applyTracking(Order $order, array $fulfillments): bool
     {
@@ -121,22 +119,26 @@ class TrackingSynchroniser
                 continue;
             }
 
+            $changed = $order->getTrackingCode() !== $tracking;
             $order->setTrackingCode($tracking);
 
             $carrier = is_string($fulfillment['shippingCarrierCode'] ?? null)
                 ? trim($fulfillment['shippingCarrierCode']) : '';
 
-            if ($carrier !== '') {
+            if ($carrier !== '' && $order->getShippingCompany() !== $this->carrierName($carrier)) {
                 $order->setShippingCompany($this->carrierName($carrier));
+                $changed = true;
             }
 
             $shipped = $this->date($fulfillment['shippedDate'] ?? null);
 
-            if ($shipped !== null) {
+            // Compare instants: == on DateTime objects ignores the time zone they are expressed in.
+            if ($shipped !== null && $order->getShippingDatetime() != $shipped) {
                 $order->setShippingDatetime($shipped);
+                $changed = true;
             }
 
-            return true;
+            return $changed;
         }
 
         return false;

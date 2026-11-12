@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Catalog\CategoryPaths;
+use App\Ebay\EbayException;
+use App\Ebay\EbayNotConnectedException;
+use App\Ebay\Import\OrderImportException;
 use App\Ebay\Import\PurchaseCostCalculator;
+use App\Ebay\Import\RecentOrders;
+use App\Ebay\Import\TrackingSynchroniser;
 use App\Entities\Order;
 use App\Entities\OrderItem;
 use App\Entities\Product;
@@ -23,6 +28,8 @@ use Psr\Http\Message\StreamFactoryInterface;
 /**
  * Orders: searchable list with totals and profit, order details with items
  * and transactions, create/edit/delete orders, and add/edit/remove items.
+ * From eBay: recent orders not imported yet (listed last, each importable)
+ * and syncing shipment tracking.
  *
  * An item's total is always its sold price minus fees; both may be negative
  * (refunds, returns). Profit = net total − item cost × quantity − postage −
@@ -109,6 +116,13 @@ class OrdersController extends ControllerAbstract
     ];
 
     /**
+     * Messages for `?error=` codes set by redirects.
+     */
+    private const ERRORS = [
+        'not-connected' => 'Connect your eBay account on the eBay page first.',
+    ];
+
+    /**
      * Create the controller.
      */
     public function __construct(
@@ -119,16 +133,80 @@ class OrdersController extends ControllerAbstract
         private readonly CategoryPaths $categoryPaths,
         private readonly PurchaseCostCalculator $costs,
         private readonly ClockInterface $clock,
+        private readonly RecentOrders $ebayOrders,
+        private readonly TrackingSynchroniser $tracking,
     ) {
         parent::__construct($renderer, $stream, $factory, $em);
     }
 
     /**
      * List orders newest first with item totals and profit, filtered by search
-     * text, platform, type, date range and tracking, with totals for the filtered set.
+     * text, platform, type, date range and tracking, with totals for the filtered
+     * set, followed by recent eBay orders that are not imported yet.
      */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
+        return $this->renderIndex($request);
+    }
+
+    /**
+     * Import one recent eBay order (with its items) and return to the list.
+     *
+     * @param array<string, string> $args Route placeholders, including `orderId`.
+     */
+    public function importEbayOrder(ServerRequestInterface $request, array $args): ResponseInterface
+    {
+        $days = RecentOrders::days($this->field($request, 'days'));
+
+        try {
+            $order = $this->ebayOrders->import($args['orderId'] ?? '', $this->field($request, 'promoted') === '1');
+        } catch (EbayNotConnectedException) {
+            return $this->redirect('/orders?error=not-connected');
+        } catch (OrderImportException $e) {
+            return $this->renderIndex($request, $e->getMessage(), 422, $days);
+        } catch (EbayException $e) {
+            return $this->renderIndex($request, $e->getMessage(), 502, $days);
+        }
+
+        return $this->redirect('/orders?' . http_build_query([
+            'done' => 'imported',
+            'ref' => $order->getOrderReference(),
+            'days' => $days,
+        ]));
+    }
+
+    /**
+     * Fetch tracking from eBay for eBay orders from the last 30 days that are not delivered.
+     */
+    public function syncTracking(ServerRequestInterface $request): ResponseInterface
+    {
+        try {
+            $result = $this->tracking->sync();
+        } catch (EbayNotConnectedException) {
+            return $this->redirect('/orders?error=not-connected');
+        } catch (EbayException $e) {
+            return $this->renderIndex($request, $e->getMessage(), 502);
+        }
+
+        return $this->redirect('/orders?' . http_build_query([
+            'done' => 'tracking',
+            'checked' => $result['checked'],
+            'updated' => $result['updated'],
+            'failed' => count($result['failed']),
+        ]));
+    }
+
+    /**
+     * Render the orders list and the recent eBay orders not imported yet.
+     *
+     * @param int|null $days Look-back period for eBay orders (default: the `days` query parameter).
+     */
+    private function renderIndex(
+        ServerRequestInterface $request,
+        ?string $error = null,
+        int $status = 200,
+        ?int $days = null
+    ): ResponseInterface {
         $query = $request->getQueryParams();
         $filters = [
             'q' => is_string($query['q'] ?? null) ? mb_substr(trim($query['q']), 0, 100) : '',
@@ -143,7 +221,7 @@ class OrdersController extends ControllerAbstract
         [$where, $params] = $this->whereClause($filters);
         $connection = $this->em->getConnection();
         $itemTotals = 'LEFT JOIN (SELECT order_id, COUNT(*) AS items, SUM(quantity) AS units,'
-            . ' SUM(total_sold_price) AS net, SUM(item_cost * quantity) AS cost'
+            . ' SUM(sold_price) AS gross, SUM(total_sold_price) AS net, SUM(item_cost * quantity) AS cost'
             . ' FROM order_items GROUP BY order_id) i ON i.order_id = o.id';
 
         $summaryRow = $connection->fetchAssociative(
@@ -160,7 +238,8 @@ class OrdersController extends ControllerAbstract
         $rows = $connection->fetchAllAssociative(
             'SELECT o.id, o.order_reference, o.order_date, o.platform, o.order_type, o.full_name, o.ebay_user_id,'
             . ' o.tracking_code, o.shipping_delivery_datetime, o.postage_cost, o.packaging_cost,'
-            . ' COALESCE(i.items, 0) AS items, COALESCE(i.units, 0) AS units, COALESCE(i.net, 0) AS net,'
+            . ' COALESCE(i.items, 0) AS items, COALESCE(i.units, 0) AS units, COALESCE(i.gross, 0) AS gross,'
+            . ' COALESCE(i.net, 0) AS net,'
             . ' COALESCE(i.cost, 0) AS cost'
             . " FROM orders o $itemTotals $where ORDER BY o.order_date DESC, o.id DESC"
             . ' LIMIT ' . self::PER_PAGE . ' OFFSET ' . (($page - 1) * self::PER_PAGE),
@@ -192,7 +271,39 @@ class OrdersController extends ControllerAbstract
             'types' => self::TYPES,
             'trackingFilters' => self::TRACKING_FILTERS,
             'notice' => $this->notice($query),
-        ]);
+            'error' => $error ?? (is_string($query['error'] ?? null) ? self::ERRORS[$query['error']] ?? null : null),
+            'ebay' => $this->ebayOrders($days ?? RecentOrders::days($query['days'] ?? null)),
+        ], $status);
+    }
+
+    /**
+     * Recent eBay orders not imported yet, for the bottom of the list page.
+     *
+     * @return array{connected: bool, previews: list<\App\Ebay\Import\ImportPreview>, error: string|null,
+     *     days: int, dayOptions: list<int>, trackingDays: int}
+     */
+    private function ebayOrders(int $days): array
+    {
+        $ebay = [
+            'connected' => $this->ebayOrders->isConnected(),
+            'previews' => [],
+            'error' => null,
+            'days' => $days,
+            'dayOptions' => RecentOrders::DAY_OPTIONS,
+            'trackingDays' => TrackingSynchroniser::LOOKBACK_DAYS,
+        ];
+
+        if ($ebay['connected']) {
+            try {
+                $ebay['previews'] = $this->ebayOrders->notImported($days);
+            } catch (EbayNotConnectedException) {
+                $ebay['connected'] = false;
+            } catch (EbayException $e) {
+                $ebay['error'] = $e->getMessage();
+            }
+        }
+
+        return $ebay;
     }
 
     /**
@@ -536,7 +647,8 @@ class OrdersController extends ControllerAbstract
     }
 
     /**
-     * Shape a list query row for the view, adding the profit.
+     * Shape a list query row for the view, adding the profit. Gross is the
+     * items' sold price before fees; net is after fees.
      *
      * @param array<string, mixed> $row
      *
@@ -559,6 +671,7 @@ class OrdersController extends ControllerAbstract
             'delivered' => !empty($row['shipping_delivery_datetime']),
             'items' => (int) $row['items'],
             'units' => (int) $row['units'],
+            'gross' => $this->money((float) $row['gross']),
             'net' => $this->money($net),
             'profit' => $this->money($profit),
         ];
@@ -975,13 +1088,27 @@ class OrdersController extends ControllerAbstract
     }
 
     /**
-     * Success message for a `?done=` code.
+     * Success message for a `?done=` code, built only from known codes, integers
+     * and a validated order reference.
      *
      * @param array<string, mixed> $query
      */
     private function notice(array $query): ?string
     {
-        return is_string($query['done'] ?? null) ? self::NOTICES[$query['done']] ?? null : null;
+        $int = static fn (string $key): int => max(0, (int) ($query[$key] ?? 0));
+        $ref = is_string($query['ref'] ?? null) && preg_match('/^[0-9A-Za-z-]{1,40}$/', $query['ref'])
+            ? $query['ref'] : '';
+
+        return match ($query['done'] ?? null) {
+            'imported' => $ref !== '' ? "eBay order $ref imported." : 'eBay order imported.',
+            'tracking' => sprintf(
+                'Checked %d eBay order(s): %d updated with tracking, %d could not be looked up.',
+                $int('checked'),
+                $int('updated'),
+                $int('failed')
+            ),
+            default => is_string($query['done'] ?? null) ? self::NOTICES[$query['done']] ?? null : null,
+        };
     }
 
     /**

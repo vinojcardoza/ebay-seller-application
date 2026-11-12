@@ -61,6 +61,8 @@ return function (Router $router) {
     $router->get('/orders', [OrdersController::class, 'index']);
     $router->get('/orders/create', [OrdersController::class, 'create']);
     $router->post('/orders', [OrdersController::class, 'store']);
+    $router->post('/orders/sync-tracking', [OrdersController::class, 'syncTracking']);
+    $router->post('/orders/ebay/{orderId:[0-9A-Za-z-]+}', [OrdersController::class, 'importEbayOrder']);
     $router->get('/orders/{id:number}', [OrdersController::class, 'show']);
     $router->get('/orders/{id:number}/edit', [OrdersController::class, 'edit']);
     $router->post('/orders/{id:number}', [OrdersController::class, 'update']);
@@ -89,7 +91,4 @@ return function (Router $router) {
     $router->get('/ebay/callback', [EbayController::class, 'callback']);
     $router->post('/ebay/code', [EbayController::class, 'submitCode']);
     $router->post('/ebay/disconnect', [EbayController::class, 'disconnect']);
-    $router->post('/ebay/orders/{orderId:[0-9A-Za-z-]+}', [EbayController::class, 'importOrder']);
-    $router->post('/ebay/tracking', [EbayController::class, 'syncTracking']);
-    $router->post('/ebay/feedback', [EbayController::class, 'importFeedback']);
 };

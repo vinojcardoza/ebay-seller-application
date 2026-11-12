@@ -7,15 +7,7 @@ namespace App\Controllers;
 use App\Ebay\EbayApiException;
 use App\Ebay\EbayConfig;
 use App\Ebay\EbayException;
-use App\Ebay\EbayNotConnectedException;
 use App\Ebay\EbayOAuth;
-use App\Ebay\FulfillmentApi;
-use App\Ebay\Import\FeedbackImporter;
-use App\Ebay\Import\ImportPreview;
-use App\Ebay\Import\OrderImportException;
-use App\Ebay\Import\OrderImporter;
-use App\Ebay\Import\TrackingSynchroniser;
-use App\Framework\Clock\ClockInterface;
 use App\Framework\Controller\ControllerAbstract;
 use App\Framework\Template\RendererInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,8 +17,10 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 
 /**
- * eBay integration page: connect the seller's account (OAuth), import recent
- * orders, sync shipment tracking and import feedback via eBay's REST APIs.
+ * eBay integration page: connect or disconnect the seller's account (OAuth).
+ *
+ * Importing orders and syncing tracking live on the Orders page, importing
+ * feedback on the Feedback page.
  */
 class EbayController extends ControllerAbstract
 {
@@ -36,16 +30,6 @@ class EbayController extends ControllerAbstract
     private const STATE_COOKIE = 'ebay_oauth_state';
 
     /**
-     * Allowed look-back periods (days) for the recent orders list.
-     */
-    public const DAY_OPTIONS = [1, 3, 7, 14, 30, 90];
-
-    /**
-     * Default look-back period, matching the legacy "recent orders" (3 days).
-     */
-    private const DEFAULT_DAYS = 3;
-
-    /**
      * Messages for `?error=` codes set by redirects.
      */
     private const ERRORS = [
@@ -53,7 +37,6 @@ class EbayController extends ControllerAbstract
         'denied' => 'eBay sign-in was cancelled or refused.',
         'state' => 'The eBay sign-in could not be verified. Please connect again.',
         'code' => 'Enter the authorization code, or the URL eBay redirected you to.',
-        'not-connected' => 'Connect your eBay account first.',
     ];
 
     /**
@@ -66,17 +49,12 @@ class EbayController extends ControllerAbstract
         EntityManagerInterface $em,
         private readonly EbayConfig $config,
         private readonly EbayOAuth $oauth,
-        private readonly FulfillmentApi $fulfillment,
-        private readonly OrderImporter $importer,
-        private readonly TrackingSynchroniser $tracking,
-        private readonly FeedbackImporter $feedback,
-        private readonly ClockInterface $clock,
     ) {
         parent::__construct($renderer, $stream, $factory, $em);
     }
 
     /**
-     * Show connection status, actions and recent eBay orders.
+     * Show the connection status and the connect / disconnect actions.
      */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
@@ -159,113 +137,20 @@ class EbayController extends ControllerAbstract
     }
 
     /**
-     * Import one eBay order (with its items) into the orders table.
-     *
-     * @param array<string, string> $args Route placeholders, including `orderId`.
-     */
-    public function importOrder(ServerRequestInterface $request, array $args): ResponseInterface
-    {
-        $orderId = $args['orderId'] ?? '';
-        $days = $this->days($this->field($request, 'days'));
-
-        try {
-            $order = $this->importer->import(
-                $this->fulfillment->order($orderId),
-                $this->field($request, 'promoted') === '1'
-            );
-        } catch (EbayNotConnectedException) {
-            return $this->redirect('/ebay?error=not-connected');
-        } catch (OrderImportException $e) {
-            return $this->renderIndex($request, $e->getMessage(), 422, $days);
-        } catch (EbayException $e) {
-            return $this->renderIndex($request, $e->getMessage(), 502, $days);
-        }
-
-        return $this->redirect('/ebay?' . http_build_query([
-            'done' => 'imported',
-            'ref' => $order->getOrderReference(),
-            'days' => $days,
-        ]));
-    }
-
-    /**
-     * Fetch tracking details from eBay for recent orders that have none.
-     */
-    public function syncTracking(ServerRequestInterface $request): ResponseInterface
-    {
-        try {
-            $result = $this->tracking->sync();
-        } catch (EbayNotConnectedException) {
-            return $this->redirect('/ebay?error=not-connected');
-        } catch (EbayException $e) {
-            return $this->renderIndex($request, $e->getMessage(), 502);
-        }
-
-        return $this->redirect('/ebay?' . http_build_query([
-            'done' => 'tracking',
-            'checked' => $result['checked'],
-            'updated' => $result['updated'],
-            'failed' => count($result['failed']),
-        ]));
-    }
-
-    /**
-     * Import new feedback received from buyers.
-     */
-    public function importFeedback(ServerRequestInterface $request): ResponseInterface
-    {
-        try {
-            $result = $this->feedback->import();
-        } catch (EbayNotConnectedException) {
-            return $this->redirect('/ebay?error=not-connected');
-        } catch (EbayException $e) {
-            return $this->renderIndex($request, $e->getMessage(), 502);
-        }
-
-        return $this->redirect('/ebay?' . http_build_query([
-            'done' => 'feedback',
-            'fetched' => $result['fetched'],
-            'imported' => $result['imported'],
-        ]));
-    }
-
-    /**
-     * Render the eBay page, loading recent orders when connected.
+     * Render the eBay page.
      */
     private function renderIndex(
         ServerRequestInterface $request,
         ?string $error = null,
-        int $status = 200,
-        ?int $days = null
+        int $status = 200
     ): ResponseInterface {
         $query = $request->getQueryParams();
-        $days ??= $this->days($query['days'] ?? null);
-        $connection = $this->config->isConfigured() ? $this->oauth->connection() : null;
-        $previews = [];
-        $ordersError = null;
-
-        if ($connection !== null) {
-            try {
-                $previews = $this->importer->preview(
-                    $this->fulfillment->ordersCreatedSince($this->clock->now()->modify("-$days days"))
-                );
-                usort($previews, static fn (ImportPreview $a, ImportPreview $b): int => $b->created <=> $a->created);
-            } catch (EbayNotConnectedException) {
-                $connection = null;
-            } catch (EbayApiException $e) {
-                $ordersError = $e->getMessage();
-            }
-        }
 
         return $this->render('ebay/index', [
             'config' => $this->config,
-            'connection' => $connection,
-            'previews' => $previews,
-            'days' => $days,
-            'dayOptions' => self::DAY_OPTIONS,
+            'connection' => $this->config->isConfigured() ? $this->oauth->connection() : null,
             'notice' => $this->notice($query),
             'error' => $error ?? (is_string($query['error'] ?? null) ? self::ERRORS[$query['error']] ?? null : null),
-            'ordersError' => $ordersError,
         ], $status);
     }
 
@@ -295,32 +180,15 @@ class EbayController extends ControllerAbstract
     }
 
     /**
-     * Success message for a `?done=` redirect, built only from known codes and integers.
+     * Success message for a `?done=` redirect.
      *
      * @param array<string, mixed> $query
      */
     private function notice(array $query): ?string
     {
-        $int = static fn (string $key): int => max(0, (int) ($query[$key] ?? 0));
-        $ref = is_string($query['ref'] ?? null) && preg_match('/^[0-9A-Za-z-]{1,40}$/', $query['ref'])
-            ? $query['ref'] : '';
-
         return match ($query['done'] ?? null) {
             'connected' => 'eBay account connected.',
             'disconnected' => 'eBay account disconnected.',
-            'imported' => $ref !== '' ? "Order $ref imported." : 'Order imported.',
-            'tracking' => sprintf(
-                'Checked %d order(s): %d updated with tracking, %d could not be looked up.',
-                $int('checked'),
-                $int('updated'),
-                $int('failed')
-            ),
-            'feedback' => sprintf(
-                'Fetched %d feedback entr%s; %d new imported.',
-                $int('fetched'),
-                $int('fetched') === 1 ? 'y' : 'ies',
-                $int('imported')
-            ),
             default => null,
         };
     }
@@ -339,16 +207,6 @@ class EbayController extends ControllerAbstract
 
         // rawurldecode keeps "+" (eBay codes may contain it); only decode encoded input.
         return str_contains($value, '%') ? rawurldecode($value) : $value;
-    }
-
-    /**
-     * Look-back days from user input, limited to the allowed options.
-     */
-    private function days(mixed $value): int
-    {
-        $days = is_numeric($value) ? (int) $value : self::DEFAULT_DAYS;
-
-        return in_array($days, self::DAY_OPTIONS, true) ? $days : self::DEFAULT_DAYS;
     }
 
     /**

@@ -6,7 +6,13 @@ namespace Tests\Controllers;
 
 use App\Catalog\CategoryPaths;
 use App\Controllers\OrdersController;
+use App\Ebay\EbayApiException;
+use App\Ebay\EbayNotConnectedException;
+use App\Ebay\Import\ImportPreview;
+use App\Ebay\Import\OrderImportException;
 use App\Ebay\Import\PurchaseCostCalculator;
+use App\Ebay\Import\RecentOrders;
+use App\Ebay\Import\TrackingSynchroniser;
 use App\Entities\Category;
 use App\Entities\Order;
 use App\Entities\OrderItem;
@@ -14,6 +20,7 @@ use App\Entities\Product;
 use App\Entities\Transaction;
 use App\Framework\Template\PlatesRender;
 use DateTime;
+use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -22,6 +29,8 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use ReflectionProperty;
@@ -29,7 +38,8 @@ use Tests\Support\FrozenClock;
 
 /**
  * Tests for every OrdersController action, using real views, in-memory fake
- * repositories, a fake DBAL connection for the list, and a fake cost calculator.
+ * repositories, a fake DBAL connection for the list, a fake cost calculator
+ * and fake eBay services (not connected unless a test says otherwise).
  */
 #[CoversClass(OrdersController::class)]
 final class OrdersControllerTest extends TestCase
@@ -94,6 +104,23 @@ final class OrdersControllerTest extends TestCase
     private OrdersController $controller;
 
     /**
+     * Recent eBay orders fake (a stub until a test asks for a mock via ebayOrdersMock()).
+     */
+    private RecentOrders&Stub $ebayOrders;
+
+    /**
+     * Tracking synchroniser fake.
+     */
+    private TrackingSynchroniser&Stub $tracking;
+
+    /**
+     * Builds the controller with the current eBay fakes.
+     *
+     * @var \Closure(): OrdersController
+     */
+    private \Closure $build;
+
+    /**
      * Seed: category Electronics; products 470 (regulator) and 410 (heatsink);
      * order 5 "12-34567-89012" (eBay purchase, postage 1.55, packaging 0.08) with
      * item 1 (2 × 470, cost 0.45, sold 8.00, fees 1.40, net 6.60) and item 2
@@ -139,14 +166,14 @@ final class OrdersControllerTest extends TestCase
                 'platform' => 'Ebay', 'order_type' => 'Purchase', 'full_name' => 'Jane Buyer',
                 'ebay_user_id' => 'jane_b', 'tracking_code' => 'AB123GB', 'shipping_delivery_datetime' => null,
                 'postage_cost' => '1.55', 'packaging_cost' => '0.08', 'items' => 2, 'units' => '2',
-                'net' => '3.33', 'cost' => '0.90',
+                'gross' => '6.60', 'net' => '3.33', 'cost' => '0.90',
             ],
             [
                 'id' => 7, 'order_reference' => 'R-1', 'order_date' => '2026-11-08 10:00:00',
                 'platform' => 'Ebay', 'order_type' => 'Refund', 'full_name' => null, 'ebay_user_id' => null,
                 'tracking_code' => null, 'shipping_delivery_datetime' => '2026-11-09 12:00:00',
                 'postage_cost' => '0.00', 'packaging_cost' => '0.00', 'items' => 0, 'units' => '0',
-                'net' => '-3.27', 'cost' => '0.00',
+                'gross' => '0.00', 'net' => '-3.27', 'cost' => '0.00',
             ],
         ];
 
@@ -195,22 +222,28 @@ final class OrdersControllerTest extends TestCase
         $costs = $this->createStub(PurchaseCostCalculator::class);
         $costs->method('unitCost')->willReturn('0.45');
 
+        $this->ebayOrders = $this->createStub(RecentOrders::class);
+        $this->tracking = $this->createStub(TrackingSynchroniser::class);
+
         $factory = new Psr17Factory();
-        $this->controller = new OrdersController(
+        $this->build = fn (): OrdersController => new OrdersController(
             new PlatesRender(),
             $factory,
             $factory,
             $em,
             new CategoryPaths($em),
             $costs,
-            new FrozenClock('2026-11-10 12:00:00')
+            new FrozenClock('2026-11-10 12:00:00'),
+            $this->ebayOrders,
+            $this->tracking,
         );
+        $this->controller = ($this->build)();
     }
 
     // ---------- index ----------
 
     /**
-     * The list shows totals and each order's reference, buyer, type, units, net, profit and tracking.
+     * The list shows totals and each order's reference, buyer, type, units, gross, net, profit and tracking.
      */
     public function testIndexListsOrders(): void
     {
@@ -228,6 +261,8 @@ final class OrdersControllerTest extends TestCase
         $this->assertStringContainsString('Jane Buyer', $first);
         $this->assertStringContainsString('href="/orders?q=jane_b"', $first);
         $this->assertStringContainsString('tint-success">Purchase', $first);
+        $this->assertStringContainsString('<th class="text-end">Gross</th>', $body);
+        $this->assertStringContainsString('£6.60', $first, 'Gross: sold price before fees.');
         $this->assertStringContainsString('£3.33', $first);
         $this->assertStringContainsString('£0.80', $first, 'Profit: 3.33 − 0.90 − 1.55 − 0.08.');
         $this->assertStringContainsString('AB123GB', $first);
@@ -235,6 +270,7 @@ final class OrdersControllerTest extends TestCase
         $refund = $this->rowFor($body, '/orders/7"');
         $this->assertStringContainsString('tint-danger">Refund', $refund);
         $this->assertStringContainsString('−£3.27', $refund);
+        $this->assertStringContainsString('£0.00', $refund);
         $this->assertStringContainsString('tint-warning">None', $refund);
         $this->assertStringContainsString('tint-success">Delivered', $refund);
         $this->assertStringContainsString('<span class="text-body-secondary">—</span>', $refund);
@@ -796,7 +832,283 @@ final class OrdersControllerTest extends TestCase
         $this->assertNoWrites();
     }
 
+    // ---------- eBay orders & tracking ----------
+
+    /**
+     * Not connected: the eBay section links to the eBay page, Sync tracking is disabled and eBay is not called.
+     */
+    public function testIndexWhenEbayNotConnected(): void
+    {
+        $mock = $this->ebayOrdersMock();
+        $mock->method('isConnected')->willReturn(false);
+        $mock->expects($this->never())->method('notImported');
+
+        $body = $this->body($this->controller->index($this->get()));
+
+        $this->assertStringContainsString('<a href="/ebay">Connect your eBay account</a>', $body);
+        $this->assertMatchesRegularExpression(
+            '#action="/orders/sync-tracking"[^>]*>\s*<button[^>]*disabled>#',
+            $body
+        );
+    }
+
+    /**
+     * Connected: recent non-imported eBay orders are listed after the orders list, with import forms.
+     */
+    public function testIndexListsEbayOrdersLast(): void
+    {
+        $mock = $this->ebayOrdersMock();
+        $mock->method('isConnected')->willReturn(true);
+        $mock->expects($this->once())->method('notImported')->with(7)->willReturn([
+            $this->preview('12-new'),
+            $this->preview('12-bad', null),
+        ]);
+
+        $response = $this->controller->index($this->get(['days' => '7', 'platform' => 'Ebay']));
+        $body = $this->body($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertLessThan(
+            strpos($body, 'id="ebay-orders"'),
+            strpos($body, '/orders/5"'),
+            'eBay orders come after the orders list.'
+        );
+        $this->assertMatchesRegularExpression('#<option value="7"\s+selected>#', $body);
+        $this->assertStringContainsString('action="/orders/ebay/12-new"', $body);
+        $this->assertStringNotContainsString('action="/orders/ebay/12-bad"', $body);
+        $this->assertStringContainsString('Unknown SKU: LCD-1602.', $body);
+        $this->assertStringContainsString('£6.99', $body);
+        $this->assertStringContainsString('<input type="hidden" name="platform" value="Ebay">', $body);
+        $this->assertStringContainsString(
+            '<input type="hidden" name="days" value="7">',
+            substr($body, 0, (int) strpos($body, 'id="ebay-orders"')),
+            'The filter form keeps the eBay period.'
+        );
+        $this->assertMatchesRegularExpression(
+            '#action="/orders/sync-tracking"[^>]*>\s*<button type="submit" class="btn btn-light-primary" >#',
+            $body
+        );
+    }
+
+    /**
+     * With every recent eBay order imported, the section says so.
+     */
+    public function testIndexWhenAllEbayOrdersImported(): void
+    {
+        $this->ebayOrders->method('isConnected')->willReturn(true);
+        $this->ebayOrders->method('notImported')->willReturn([]);
+
+        $body = $this->body($this->controller->index($this->get()));
+
+        $this->assertStringContainsString('Every eBay order from the last 3 days is imported.', $body);
+    }
+
+    /**
+     * An eBay error while loading orders is shown in the section without failing the page.
+     */
+    public function testIndexShowsEbayError(): void
+    {
+        $this->ebayOrders->method('isConnected')->willReturn(true);
+        $this->ebayOrders->method('notImported')
+            ->willThrowException(new EbayApiException('eBay request GET /order failed (HTTP 500).', 500));
+
+        $response = $this->controller->index($this->get());
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringContainsString('eBay request GET /order failed (HTTP 500).', $this->body($response));
+    }
+
+    /**
+     * Tokens that turn out to be unusable while loading are shown as not connected.
+     */
+    public function testIndexWhenEbayTokensRejected(): void
+    {
+        $this->ebayOrders->method('isConnected')->willReturn(true);
+        $this->ebayOrders->method('notImported')->willThrowException(new EbayNotConnectedException('expired'));
+
+        $this->assertStringContainsString(
+            'Connect your eBay account</a>',
+            $this->body($this->controller->index($this->get()))
+        );
+    }
+
+    /**
+     * Query codes and the message shown for them.
+     *
+     * @return array<string, array{array<string, string>, string}>
+     */
+    public static function ebayMessageProvider(): array
+    {
+        return [
+            'imported' => [['done' => 'imported', 'ref' => '12-34567-89012'], 'eBay order 12-34567-89012 imported.'],
+            'imported with unsafe ref' => [['done' => 'imported', 'ref' => '<script>'], 'eBay order imported.'],
+            'tracking' => [
+                ['done' => 'tracking', 'checked' => '5', 'updated' => '3', 'failed' => '1'],
+                'Checked 5 eBay order(s): 3 updated with tracking, 1 could not be looked up.',
+            ],
+            'not connected' => [['error' => 'not-connected'], 'Connect your eBay account on the eBay page first.'],
+        ];
+    }
+
+    /**
+     * eBay redirect codes show fixed messages built only from known values.
+     *
+     * @param array<string, string> $query
+     */
+    #[DataProvider('ebayMessageProvider')]
+    public function testIndexShowsEbayMessages(array $query, string $message): void
+    {
+        $body = $this->body($this->controller->index($this->get($query)));
+
+        $this->assertStringContainsString($message, $body);
+        $this->assertStringNotContainsString('script&gt;', $body);
+    }
+
+    /**
+     * Importing an eBay order passes the promoted flag and redirects back with the reference and period.
+     */
+    public function testImportEbayOrder(): void
+    {
+        $this->ebayOrdersMock()->expects($this->once())->method('import')->with('12-34567-89012', true)
+            ->willReturn((new Order())->setOrderReference('12-34567-89012'));
+
+        $response = $this->controller->importEbayOrder(
+            $this->post(['promoted' => '1', 'days' => '14']),
+            ['orderId' => '12-34567-89012']
+        );
+
+        $this->assertRedirect('/orders?done=imported&ref=12-34567-89012&days=14', $response);
+    }
+
+    /**
+     * Without the promoted box ticked the import is not promoted, and an unknown period becomes the default.
+     */
+    public function testImportEbayOrderNotPromoted(): void
+    {
+        $this->ebayOrdersMock()->expects($this->once())->method('import')->with('12-1', false)
+            ->willReturn((new Order())->setOrderReference('12-1'));
+
+        $response = $this->controller->importEbayOrder($this->post(['days' => '365']), ['orderId' => '12-1']);
+
+        $this->assertRedirect('/orders?done=imported&ref=12-1&days=3', $response);
+    }
+
+    /**
+     * Import failures, the status of the page shown and the message on it.
+     *
+     * @return array<string, array{\Throwable, int, string}>
+     */
+    public static function importFailureProvider(): array
+    {
+        return [
+            'cannot be imported' => [
+                new OrderImportException('eBay order 12-1 cannot be imported: Unknown SKU: X.'),
+                422,
+                'eBay order 12-1 cannot be imported: Unknown SKU: X.',
+            ],
+            'eBay error' => [new EbayApiException('Order 12-1 was not found.', 404), 502, 'Order 12-1 was not found.'],
+        ];
+    }
+
+    /**
+     * A failed import redisplays the orders page with the reason and the chosen period.
+     */
+    #[DataProvider('importFailureProvider')]
+    public function testImportEbayOrderFails(\Throwable $exception, int $status, string $message): void
+    {
+        $this->ebayOrders->method('import')->willThrowException($exception);
+
+        $response = $this->controller->importEbayOrder($this->post(['days' => '14']), ['orderId' => '12-1']);
+        $body = $this->body($response);
+
+        $this->assertSame($status, $response->getStatusCode());
+        $this->assertStringContainsString($message, $body);
+        $this->assertMatchesRegularExpression('#<option value="14"\s+selected>#', $body);
+    }
+
+    /**
+     * When eBay is not connected, importing asks the user to connect.
+     */
+    public function testImportEbayOrderNotConnected(): void
+    {
+        $this->ebayOrders->method('import')->willThrowException(new EbayNotConnectedException('x'));
+
+        $this->assertRedirect(
+            '/orders?error=not-connected',
+            $this->controller->importEbayOrder($this->post([]), ['orderId' => '12-1'])
+        );
+    }
+
+    /**
+     * Tracking sync redirects with the counts.
+     */
+    public function testSyncTracking(): void
+    {
+        $this->tracking->method('sync')->willReturn(['checked' => 4, 'updated' => 2, 'failed' => ['06-1']]);
+
+        $this->assertRedirect(
+            '/orders?done=tracking&checked=4&updated=2&failed=1',
+            $this->controller->syncTracking($this->post([]))
+        );
+    }
+
+    /**
+     * Tracking sync asks to connect when eBay is not connected.
+     */
+    public function testSyncTrackingNotConnected(): void
+    {
+        $this->tracking->method('sync')->willThrowException(new EbayNotConnectedException('x'));
+
+        $this->assertRedirect('/orders?error=not-connected', $this->controller->syncTracking($this->post([])));
+    }
+
+    /**
+     * Tracking sync shows eBay errors on the orders page with a 502.
+     */
+    public function testSyncTrackingApiError(): void
+    {
+        $this->tracking->method('sync')->willThrowException(new EbayApiException('eBay is down', 503));
+
+        $response = $this->controller->syncTracking($this->post([]));
+
+        $this->assertSame(502, $response->getStatusCode());
+        $this->assertStringContainsString('eBay is down', $this->body($response));
+    }
+
     // ---------- helpers ----------
+
+    /**
+     * Replace the recent eBay orders stub with a mock (rebuilding the controller) so the test can set expectations.
+     */
+    private function ebayOrdersMock(): RecentOrders&MockObject
+    {
+        if ($this->ebayOrders instanceof MockObject) {
+            return $this->ebayOrders;
+        }
+
+        $mock = $this->createMock(RecentOrders::class);
+        $this->ebayOrders = $mock;
+        $this->controller = ($this->build)();
+
+        return $mock;
+    }
+
+    /**
+     * Build an eBay order preview with one LCD-1602 line (matched to a product unless `$match` is null).
+     */
+    private function preview(string $orderId, ?string $match = ImportPreview::MATCH_PRODUCT): ImportPreview
+    {
+        return new ImportPreview(
+            $orderId,
+            new DateTimeImmutable('2026-11-09 10:00:00 UTC'),
+            'buyer_1',
+            '6.99',
+            'GBP',
+            [['sku' => 'LCD-1602', 'title' => 'LCD Display', 'quantity' => 1, 'match' => $match]],
+            false,
+            false,
+        );
+    }
 
     /**
      * A valid order submission (dated before the clock).
