@@ -853,9 +853,9 @@ final class OrdersControllerTest extends TestCase
     }
 
     /**
-     * Connected: recent non-imported eBay orders are listed after the orders list, with import forms.
+     * Connected: recent non-imported eBay orders are listed above the orders list, with import forms.
      */
-    public function testIndexListsEbayOrdersLast(): void
+    public function testIndexListsEbayOrdersAboveOrders(): void
     {
         $mock = $this->ebayOrdersMock();
         $mock->method('isConnected')->willReturn(true);
@@ -869,9 +869,9 @@ final class OrdersControllerTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
         $this->assertLessThan(
-            strpos($body, 'id="ebay-orders"'),
             strpos($body, '/orders/5"'),
-            'eBay orders come after the orders list.'
+            strpos($body, 'id="ebay-orders"'),
+            'eBay orders come before the orders list.'
         );
         $this->assertMatchesRegularExpression('#<option value="7"\s+selected>#', $body);
         $this->assertStringContainsString('action="/orders/ebay/12-new"', $body);
@@ -881,7 +881,7 @@ final class OrdersControllerTest extends TestCase
         $this->assertStringContainsString('<input type="hidden" name="platform" value="Ebay">', $body);
         $this->assertStringContainsString(
             '<input type="hidden" name="days" value="7">',
-            substr($body, 0, (int) strpos($body, 'id="ebay-orders"')),
+            substr($body, (int) strpos($body, '<form method="get" action="/orders" ')),
             'The filter form keeps the eBay period.'
         );
         $this->assertMatchesRegularExpression(
