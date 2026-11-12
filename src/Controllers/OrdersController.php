@@ -176,7 +176,7 @@ class OrdersController extends ControllerAbstract
     }
 
     /**
-     * Fetch tracking from eBay for eBay orders from the last 30 days that are not delivered.
+     * Fetch tracking and delivery from eBay for eBay orders from the last 30 days that are not delivered.
      */
     public function syncTracking(ServerRequestInterface $request): ResponseInterface
     {
@@ -192,8 +192,9 @@ class OrdersController extends ControllerAbstract
             'done' => 'tracking',
             'checked' => $result['checked'],
             'updated' => $result['updated'],
+            'delivered' => $result['delivered'],
             'failed' => count($result['failed']),
-        ]));
+        ] + ($result['deliveryError'] !== null ? ['nodelivery' => 1] : [])));
     }
 
     /**
@@ -1107,10 +1108,12 @@ class OrdersController extends ControllerAbstract
         return match ($query['done'] ?? null) {
             'imported' => $ref !== '' ? "eBay order $ref imported." : 'eBay order imported.',
             'tracking' => sprintf(
-                'Checked %d eBay order(s): %d updated with tracking, %d could not be looked up.',
+                'Checked %d eBay order(s): %d updated, %d delivered, %d could not be looked up.%s',
                 $int('checked'),
                 $int('updated'),
-                $int('failed')
+                $int('delivered'),
+                $int('failed'),
+                isset($query['nodelivery']) ? ' Delivery status could not be fetched from eBay.' : ''
             ),
             default => is_string($query['done'] ?? null) ? self::NOTICES[$query['done']] ?? null : null,
         };

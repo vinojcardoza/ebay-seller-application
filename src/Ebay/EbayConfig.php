@@ -171,6 +171,25 @@ final readonly class EbayConfig
     }
 
     /**
+     * Trading API site ID for the marketplace (e.g. 3 for EBAY_GB), defaulting to the UK site.
+     */
+    public function tradingSiteId(): int
+    {
+        return match ($this->marketplaceId) {
+            'EBAY_US' => 0,
+            'EBAY_CA' => 2,
+            'EBAY_AU' => 15,
+            'EBAY_AT' => 16,
+            'EBAY_FR' => 71,
+            'EBAY_DE' => 77,
+            'EBAY_IT' => 101,
+            'EBAY_ES' => 186,
+            'EBAY_IE' => 205,
+            default => 3,
+        };
+    }
+
+    /**
      * Base URL of the seller consent (sign-in) page.
      */
     public function authBaseUrl(): string

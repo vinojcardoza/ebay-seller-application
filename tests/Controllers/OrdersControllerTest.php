@@ -950,8 +950,13 @@ final class OrdersControllerTest extends TestCase
             'imported' => [['done' => 'imported', 'ref' => '12-34567-89012'], 'eBay order 12-34567-89012 imported.'],
             'imported with unsafe ref' => [['done' => 'imported', 'ref' => '<script>'], 'eBay order imported.'],
             'tracking' => [
-                ['done' => 'tracking', 'checked' => '5', 'updated' => '3', 'failed' => '1'],
-                'Checked 5 eBay order(s): 3 updated with tracking, 1 could not be looked up.',
+                ['done' => 'tracking', 'checked' => '5', 'updated' => '3', 'delivered' => '2', 'failed' => '1'],
+                'Checked 5 eBay order(s): 3 updated, 2 delivered, 1 could not be looked up.',
+            ],
+            'tracking without delivery status' => [
+                ['done' => 'tracking', 'checked' => '5', 'updated' => '1', 'failed' => '0', 'nodelivery' => '1'],
+                'Checked 5 eBay order(s): 1 updated, 0 delivered, 0 could not be looked up.'
+                . ' Delivery status could not be fetched from eBay.',
             ],
             'not connected' => [['error' => 'not-connected'], 'Connect your eBay account on the eBay page first.'],
         ];
@@ -1047,14 +1052,31 @@ final class OrdersControllerTest extends TestCase
     }
 
     /**
-     * Tracking sync redirects with the counts.
+     * Tracking sync redirects with the counts, including orders now delivered.
      */
     public function testSyncTracking(): void
     {
-        $this->tracking->method('sync')->willReturn(['checked' => 4, 'updated' => 2, 'failed' => ['06-1']]);
+        $this->tracking->method('sync')->willReturn(
+            ['checked' => 4, 'updated' => 2, 'delivered' => 1, 'failed' => ['06-1'], 'deliveryError' => null]
+        );
 
         $this->assertRedirect(
-            '/orders?done=tracking&checked=4&updated=2&failed=1',
+            '/orders?done=tracking&checked=4&updated=2&delivered=1&failed=1',
+            $this->controller->syncTracking($this->post([]))
+        );
+    }
+
+    /**
+     * Tracking sync flags a failed delivery lookup in the redirect.
+     */
+    public function testSyncTrackingDeliveryLookupFailed(): void
+    {
+        $this->tracking->method('sync')->willReturn(
+            ['checked' => 4, 'updated' => 2, 'delivered' => 0, 'failed' => [], 'deliveryError' => 'eBay is down']
+        );
+
+        $this->assertRedirect(
+            '/orders?done=tracking&checked=4&updated=2&delivered=0&failed=0&nodelivery=1',
             $this->controller->syncTracking($this->post([]))
         );
     }

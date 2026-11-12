@@ -73,7 +73,7 @@ $kpis = [
 ?>
 <?php $this->start('actions') ?>
     <form method="post" action="/orders/sync-tracking"
-          title="Carrier, tracking number and shipped date for eBay orders from the last <?php echo $ebay['trackingDays']; ?> days that are not delivered">
+          title="Carrier, tracking number, shipped and delivered dates for eBay orders from the last <?php echo $ebay['trackingDays']; ?> days that are not delivered">
         <button type="submit" class="btn btn-light-primary" <?php echo $ebay['connected'] ? '' : 'disabled'; ?>>
             <i class="ti ti-truck-delivery" aria-hidden="true"></i> Sync tracking
         </button>

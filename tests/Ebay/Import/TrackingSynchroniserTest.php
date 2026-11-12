@@ -7,6 +7,7 @@ namespace Tests\Ebay\Import;
 use App\Ebay\EbayApiException;
 use App\Ebay\FulfillmentApi;
 use App\Ebay\Import\TrackingSynchroniser;
+use App\Ebay\TradingApi;
 use App\Entities\Order;
 use DateTimeZone;
 use Doctrine\Common\Collections\AbstractLazyCollection;
@@ -44,6 +45,20 @@ final class TrackingSynchroniserTest extends TestCase
     private array $fulfillments = [];
 
     /**
+     * Delivery times eBay's Trading API returns by order reference, or an exception to throw.
+     *
+     * @var array<string, \DateTimeImmutable>|EbayApiException
+     */
+    private array|EbayApiException $deliveries = [];
+
+    /**
+     * Order references passed to each delivery lookup.
+     *
+     * @var list<list<string>>
+     */
+    private array $deliveryLookups = [];
+
+    /**
      * Criteria the synchroniser queried with.
      */
     private ?Criteria $criteria = null;
@@ -65,6 +80,8 @@ final class TrackingSynchroniserTest extends TestCase
     {
         $this->orders = [];
         $this->fulfillments = [];
+        $this->deliveries = [];
+        $this->deliveryLookups = [];
         $this->criteria = null;
 
         $repository = $this->createStub(EntityRepository::class);
@@ -92,7 +109,23 @@ final class TrackingSynchroniserTest extends TestCase
             return $result;
         });
 
-        $this->synchroniser = new TrackingSynchroniser($this->em, $api, new FrozenClock('2026-11-10 12:00:00 UTC'));
+        $trading = $this->createStub(TradingApi::class);
+        $trading->method('deliveryTimes')->willReturnCallback(function (array $references): array {
+            $this->deliveryLookups[] = $references;
+
+            if ($this->deliveries instanceof EbayApiException) {
+                throw $this->deliveries;
+            }
+
+            return $this->deliveries;
+        });
+
+        $this->synchroniser = new TrackingSynchroniser(
+            $this->em,
+            $api,
+            $trading,
+            new FrozenClock('2026-11-10 12:00:00 UTC')
+        );
     }
 
     /**
@@ -111,14 +144,14 @@ final class TrackingSynchroniserTest extends TestCase
 
         $result = $this->synchroniser->sync();
 
-        $this->assertSame(['checked' => 1, 'updated' => 1, 'failed' => []], $result);
+        $this->assertSame($this->syncResult(1, 1), $result);
         $this->assertSame('AB123456789GB', $order->getTrackingCode());
         $this->assertSame('Royal Mail', $order->getShippingCompany());
         $this->assertSame(
             '2026-11-09 16:05:00',
             $this->utc($order->getShippingDatetime())
         );
-        $this->assertNull($order->getShippingDeliveryDatetime(), 'The REST API has no delivery date.');
+        $this->assertNull($order->getShippingDeliveryDatetime(), 'Not delivered yet.');
     }
 
     /**
@@ -165,7 +198,7 @@ final class TrackingSynchroniserTest extends TestCase
 
         $result = $this->synchroniser->sync();
 
-        $this->assertSame(['checked' => 2, 'updated' => 1, 'failed' => []], $result);
+        $this->assertSame($this->syncResult(2, 1), $result);
         $this->assertSame('SECOND', $shipped->getTrackingCode());
         $this->assertNull($shipped->getShippingCompany());
         $this->assertNull($unshipped->getTrackingCode());
@@ -184,7 +217,7 @@ final class TrackingSynchroniserTest extends TestCase
 
         $result = $this->synchroniser->sync();
 
-        $this->assertSame(['checked' => 2, 'updated' => 1, 'failed' => ['06-old']], $result);
+        $this->assertSame($this->syncResult(2, 1, failed: ['06-old']), $result);
         $this->assertSame('T1', $ok->getTrackingCode());
     }
 
@@ -196,7 +229,7 @@ final class TrackingSynchroniserTest extends TestCase
         $this->order('12-1');
         $this->em->expects($this->never())->method('flush');
 
-        $this->assertSame(['checked' => 1, 'updated' => 0, 'failed' => []], $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 0), $this->synchroniser->sync());
     }
 
     /**
@@ -215,7 +248,7 @@ final class TrackingSynchroniserTest extends TestCase
         ]];
         $this->em->expects($this->never())->method('flush');
 
-        $this->assertSame(['checked' => 1, 'updated' => 0, 'failed' => []], $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 0), $this->synchroniser->sync());
         $this->assertSame('T1', $order->getTrackingCode());
     }
 
@@ -228,8 +261,88 @@ final class TrackingSynchroniserTest extends TestCase
         $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'NEW']];
         $this->em->expects($this->once())->method('flush');
 
-        $this->assertSame(['checked' => 1, 'updated' => 1, 'failed' => []], $this->synchroniser->sync());
+        $this->assertSame($this->syncResult(1, 1), $this->synchroniser->sync());
         $this->assertSame('NEW', $order->getTrackingCode());
+    }
+
+    /**
+     * A delivery reported by the carrier sets the delivery date (in the app's time zone) and counts as an update.
+     */
+    public function testDeliveredOrderGetsDeliveryDate(): void
+    {
+        $order = $this->order('12-1')->setTrackingCode('T1');
+        $this->order('12-2');
+        $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'T1']];
+        $this->deliveries = ['12-1' => new \DateTimeImmutable('2026-11-10T09:30:00.000Z')];
+        $this->em->expects($this->once())->method('flush');
+
+        $result = $this->synchroniser->sync();
+
+        $this->assertSame($this->syncResult(2, 1, delivered: 1), $result);
+        $this->assertSame([['12-1', '12-2']], $this->deliveryLookups, 'One lookup for all checked orders.');
+        $this->assertSame('2026-11-10 09:30:00', $this->utc($order->getShippingDeliveryDatetime()));
+        $this->assertSame(
+            date_default_timezone_get(),
+            $order->getShippingDeliveryDatetime()?->getTimezone()->getName()
+        );
+    }
+
+    /**
+     * New tracking and a delivery on the same order count as one updated order.
+     */
+    public function testTrackingAndDeliveryCountOnce(): void
+    {
+        $order = $this->order('12-1');
+        $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'T1']];
+        $this->deliveries = ['12-1' => new \DateTimeImmutable('2026-11-10T09:30:00Z')];
+        $this->em->expects($this->once())->method('flush');
+
+        $this->assertSame($this->syncResult(1, 1, delivered: 1), $this->synchroniser->sync());
+        $this->assertSame('T1', $order->getTrackingCode());
+        $this->assertNotNull($order->getShippingDeliveryDatetime());
+    }
+
+    /**
+     * Orders whose tracking lookup failed are still checked for delivery.
+     */
+    public function testDeliveryCheckedWhenTrackingLookupFails(): void
+    {
+        $order = $this->order('12-1');
+        $this->fulfillments['12-1'] = new EbayApiException('Timeout');
+        $this->deliveries = ['12-1' => new \DateTimeImmutable('2026-11-10T09:30:00Z')];
+        $this->em->expects($this->once())->method('flush');
+
+        $this->assertSame($this->syncResult(1, 1, delivered: 1, failed: ['12-1']), $this->synchroniser->sync());
+        $this->assertNotNull($order->getShippingDeliveryDatetime());
+    }
+
+    /**
+     * A failed delivery lookup is reported, and tracking found is still saved.
+     */
+    public function testFailedDeliveryLookupKeepsTracking(): void
+    {
+        $order = $this->order('12-1');
+        $this->fulfillments['12-1'] = [['shipmentTrackingNumber' => 'T1']];
+        $this->deliveries = new EbayApiException('GetOrders failed');
+        $this->em->expects($this->once())->method('flush');
+
+        $this->assertSame(
+            $this->syncResult(1, 1, deliveryError: 'GetOrders failed'),
+            $this->synchroniser->sync()
+        );
+        $this->assertSame('T1', $order->getTrackingCode());
+        $this->assertNull($order->getShippingDeliveryDatetime());
+    }
+
+    /**
+     * eBay is not asked for deliveries when there are no orders to check.
+     */
+    public function testNoDeliveryLookupWithoutOrders(): void
+    {
+        $this->em->expects($this->never())->method('flush');
+
+        $this->assertSame($this->syncResult(0, 0), $this->synchroniser->sync());
+        $this->assertSame([], $this->deliveryLookups);
     }
 
     /**
@@ -318,6 +431,29 @@ final class TrackingSynchroniserTest extends TestCase
         $this->orders[] = $order;
 
         return $order;
+    }
+
+    /**
+     * Expected sync() result.
+     *
+     * @param list<string> $failed
+     *
+     * @return array{checked: int, updated: int, delivered: int, failed: list<string>, deliveryError: ?string}
+     */
+    private function syncResult(
+        int $checked,
+        int $updated,
+        int $delivered = 0,
+        array $failed = [],
+        ?string $deliveryError = null
+    ): array {
+        return [
+            'checked' => $checked,
+            'updated' => $updated,
+            'delivered' => $delivered,
+            'failed' => $failed,
+            'deliveryError' => $deliveryError,
+        ];
     }
 
     /**

@@ -90,6 +90,33 @@ final class EbayConfigTest extends TestCase
     }
 
     /**
+     * Marketplaces and their Trading API site IDs.
+     *
+     * @return array<string, array{string, int}>
+     */
+    public static function siteIdProvider(): array
+    {
+        return [
+            'UK' => ['EBAY_GB', 3],
+            'US' => ['EBAY_US', 0],
+            'Germany' => ['EBAY_DE', 77],
+            'Australia' => ['EBAY_AU', 15],
+            'unknown falls back to UK' => ['EBAY_XX', 3],
+        ];
+    }
+
+    /**
+     * The Trading API site ID follows the marketplace.
+     */
+    #[DataProvider('siteIdProvider')]
+    public function testTradingSiteId(string $marketplace, int $siteId): void
+    {
+        $config = new EbayConfig('id', 'secret', 'ru', marketplaceId: $marketplace);
+
+        $this->assertSame($siteId, $config->tradingSiteId());
+    }
+
+    /**
      * An unknown environment is rejected with a clear message.
      */
     public function testRejectsUnknownEnvironment(): void

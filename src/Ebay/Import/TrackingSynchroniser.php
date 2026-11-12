@@ -6,6 +6,7 @@ namespace App\Ebay\Import;
 
 use App\Ebay\EbayApiException;
 use App\Ebay\FulfillmentApi;
+use App\Ebay\TradingApi;
 use App\Entities\Order;
 use App\Framework\Clock\ClockInterface;
 use DateTime;
@@ -17,13 +18,15 @@ use Exception;
 use SortDirection;
 
 /**
- * Copies shipment tracking from eBay onto recent imported eBay orders that are
- * not delivered yet (no delivery date), so tracking added or changed on eBay
- * after an earlier sync is picked up too.
+ * Copies shipment tracking and delivery from eBay onto recent imported eBay
+ * orders that are not delivered yet (no delivery date), so tracking added or
+ * changed on eBay after an earlier sync is picked up too.
  *
- * Replaces the legacy "get order tracking" action. eBay's REST Fulfillment API
- * reports the carrier, tracking number and shipped date, but not the actual
- * delivery date, so `shipping_delivery_datetime` is left as it is.
+ * Replaces the legacy "get order tracking" action. The carrier, tracking number
+ * and shipped date come from the REST Fulfillment API; it has no delivery date,
+ * so `shipping_delivery_datetime` comes from the Trading API's GetOrders
+ * (`ActualDeliveryTime`, the carrier's delivery scan). Delivered orders show as
+ * delivered and are not checked again.
  */
 class TrackingSynchroniser
 {
@@ -54,17 +57,20 @@ class TrackingSynchroniser
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly FulfillmentApi $fulfillment,
+        private readonly TradingApi $trading,
         private readonly ClockInterface $clock,
     ) {
     }
 
     /**
-     * Fetch tracking for eBay orders from the last LOOKBACK_DAYS days that are not delivered.
+     * Fetch tracking and delivery for eBay orders from the last LOOKBACK_DAYS days that are not delivered.
      *
-     * @param int $limit Most orders to check in one run (one API call each).
+     * @param int $limit Most orders to check in one run (one tracking API call each, plus one delivery call).
      *
-     * @return array{checked: int, updated: int, failed: list<string>}
-     *     `updated` counts orders whose tracking changed; `failed` lists order references whose lookup failed.
+     * @return array{checked: int, updated: int, delivered: int, failed: list<string>, deliveryError: ?string}
+     *     `updated` counts orders whose tracking or delivery changed; `delivered` those now marked delivered;
+     *     `failed` lists order references whose tracking lookup failed; `deliveryError` is set when the
+     *     delivery lookup failed (tracking is still saved).
      */
     public function sync(int $limit = 50): array
     {
@@ -78,7 +84,8 @@ class TrackingSynchroniser
             ->setMaxResults(max(1, $limit));
 
         $orders = $this->em->getRepository(Order::class)->matching($criteria);
-        $result = ['checked' => 0, 'updated' => 0, 'failed' => []];
+        $result = ['checked' => 0, 'updated' => 0, 'delivered' => 0, 'failed' => [], 'deliveryError' => null];
+        $changed = [];
 
         foreach ($orders as $order) {
             $result['checked']++;
@@ -91,9 +98,38 @@ class TrackingSynchroniser
             }
 
             if ($this->applyTracking($order, $fulfillments)) {
-                $result['updated']++;
+                $changed[spl_object_id($order)] = true;
             }
         }
+
+        $checked = array_values(array_filter(
+            array_values($orders->toArray()),
+            static fn (Order $order): bool => $order->getOrderReference() !== ''
+        ));
+
+        if ($checked !== []) {
+            try {
+                $deliveries = $this->trading->deliveryTimes(array_map(
+                    static fn (Order $order): string => $order->getOrderReference(),
+                    $checked
+                ));
+            } catch (EbayApiException $e) {
+                $deliveries = [];
+                $result['deliveryError'] = $e->getMessage();
+            }
+
+            foreach ($checked as $order) {
+                $time = $deliveries[$order->getOrderReference()] ?? null;
+
+                if ($time !== null) {
+                    $order->setShippingDeliveryDatetime($this->localTime($time));
+                    $changed[spl_object_id($order)] = true;
+                    $result['delivered']++;
+                }
+            }
+        }
+
+        $result['updated'] = count($changed);
 
         if ($result['updated'] > 0) {
             $this->em->flush();
@@ -164,11 +200,17 @@ class TrackingSynchroniser
         }
 
         try {
-            return DateTime::createFromImmutable(
-                (new DateTimeImmutable($value))->setTimezone(new DateTimeZone(date_default_timezone_get()))
-            );
+            return $this->localTime(new DateTimeImmutable($value));
         } catch (Exception) {
             return null;
         }
+    }
+
+    /**
+     * A time converted to the app's time zone, as the mutable DateTime the entities store.
+     */
+    private function localTime(DateTimeImmutable $time): DateTime
+    {
+        return DateTime::createFromImmutable($time->setTimezone(new DateTimeZone(date_default_timezone_get())));
     }
 }
