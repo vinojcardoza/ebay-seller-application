@@ -95,7 +95,7 @@ The Compose stack runs four services:
 ### 1. Get the code and configure
 
 ```bash
-git clone <repository-url> ebay-seller-application
+git clone https://github.com/vinojcardoza/ebay-seller-application
 cd ebay-seller-application
 cp .env.example .env
 # edit .env: set MARIADB_DATABASE, MARIADB_USER, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
